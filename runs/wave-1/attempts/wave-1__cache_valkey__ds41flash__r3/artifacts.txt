@@ -1,0 +1,190 @@
+$ cat /app/catalog.py
+"""Product catalog used by the storefront.
+
+get_product(product_id) -> dict    {"id": int, "name": str, "price": float, "currency": str}
+update_price(product_id, price)    changes the price in the inventory service
+
+Reads of a product are cached in Valkey so that the (slow) inventory service is
+only hit on a cache miss.  The cache is shared by every storefront process,
+entries live for CACHE_TTL seconds, and a price change invalidates the entry so
+the next read in *any* process sees the new price.
+"""
+import json
+import os
+import urllib.request
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+
+VALKEY_HOST = os.environ.get("VALKEY_HOST", "127.0.0.1")
+VALKEY_PORT = int(os.environ.get("VALKEY_PORT", "6379"))
+VALKEY_DB = int(os.environ.get("VALKEY_DB", "0"))
+
+CACHE_TTL = 300  # seconds; cached products expire after 5 minutes
+
+_CACHE_PREFIX = "catalog:product"
+_VERSION_PREFIX = "catalog:version"
+
+
+def _make_client():
+    """Return a Valkey client, falling back to the redis client if needed."""
+    try:
+        import valkey  # type: ignore
+
+        return valkey.Valkey(
+            host=VALKEY_HOST,
+            port=VALKEY_PORT,
+            db=VALKEY_DB,
+            decode_responses=True,
+        )
+    except ImportError:
+        import redis  # type: ignore
+
+        return redis.Redis(
+            host=VALKEY_HOST,
+            port=VALKEY_PORT,
+            db=VALKEY_DB,
+            decode_responses=True,
+        )
+
+
+# Connection pool is shared by all threads/processes; commands are lazy.
+_client = _make_client()
+
+
+def _cache_key(product_id: int) -> str:
+    return f"{_CACHE_PREFIX}:{product_id}"
+
+
+def _version_key(product_id: int) -> str:
+    return f"{_VERSION_PREFIX}:{product_id}"
+
+
+# Store the product only if no price update happened while we were fetching it.
+# This keeps a slow in-flight read from writing stale data back over a value
+# that a concurrent update_price() has just invalidated.
+_SET_IF_UNCHANGED = """
+local current = redis.call('GET', KEYS[2]) or '0'
+if current ~= ARGV[1] then
+  return 0
+end
+redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+return 1
+"""
+
+
+def _fetch_from_inventory(product_id: int) -> dict:
+    with urllib.request.urlopen(
+        f"{INVENTORY_URL}/products/{int(product_id)}", timeout=10
+    ) as resp:
+        return json.load(resp)
+
+
+def get_product(product_id: int) -> dict:
+    product_id = int(product_id)
+    cache_key = _cache_key(product_id)
+    version_key = _version_key(product_id)
+
+    # Fast path: a recently read product is served straight from Valkey.
+    try:
+        cached = _client.get(cache_key)
+        if cached is not None:
+            return json.loads(cached)
+        version = _client.get(version_key) or "0"
+    except Exception:  # noqa: BLE001 - cache outage must not break the storefront
+        return _fetch_from_inventory(product_id)
+
+    product = _fetch_from_inventory(product_id)
+
+    # Cache the product for CACHE_TTL, but do not clobber a newer value if an
+    # update_price() landed while we were talking to the inventory service.
+    try:
+        _client.eval(
+            _SET_IF_UNCHANGED,
+            2,
+            cache_key,
+            version_key,
+            version,
+            json.dumps(product),
+            CACHE_TTL,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+    return product
+
+
+def update_price(product_id: int, price: float) -> None:
+    product_id = int(product_id)
+    body = json.dumps({"price": price}).encode()
+    req = urllib.request.Request(
+        f"{INVENTORY_URL}/products/{int(product_id)}",
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+
+    # Invalidate the shared cache so the next get_product() in any process
+    # re-reads the (now updated) price from the inventory service.  Bumping the
+    # version first stops an in-flight read from re-populating stale data.
+    try:
+        _client.incr(_version_key(product_id))
+        _client.delete(_cache_key(product_id))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+$ ls -la /app
+total 24
+drwxr-xr-x 1 root root 4096 Oct  3 05:58 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:57 ..
+drwxr-xr-x 2 root root 4096 Oct  3 05:58 __pycache__
+-rw-r--r-- 1 root root 4109 Oct  3 05:58 catalog.py
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    482 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: used_write_cpu Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: worker_pool_suspend_cnt Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: writer_queue_size Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: writer_resumed_cnt Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: writer_suspension_expired_cnt Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_deletes Flags:2
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_queries Flags:2
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_periods Flags:2
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_time Flags:2
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_upserts Flags:2
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_periods Flags:2
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_time Flags:2
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: cancel-timeouts Flags:6
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_deferred_entry_cnt Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [warning], tid: 126927556486976, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+9:M 03 Oct 2026 05:57:27.004 # <search> [notice], tid: 126927556486976, /vmsdk/src/module.cc:148: search module was successfully loaded!
+9:M 03 Oct 2026 05:57:27.004 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+9:M 03 Oct 2026 05:57:27.004 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+9:M 03 Oct 2026 05:57:27.004 * <bf> Created new data type 'bloomfltr'
+9:M 03 Oct 2026 05:57:27.005 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+9:M 03 Oct 2026 05:57:27.005 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+9:M 03 Oct 2026 05:57:27.006 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+9:M 03 Oct 2026 05:57:27.007 * Static Module 'lua' successfully loaded
+9:M 03 Oct 2026 05:57:27.007 * Server initialized
+9:M 03 Oct 2026 05:57:27.007 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:59:12.521 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

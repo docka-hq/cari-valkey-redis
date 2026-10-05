@@ -1,0 +1,79 @@
+{
+ "coding": "v1 (tiered, code lines only)",
+ "answers": 125,
+ "primary": {
+  "valkey": 35,
+  "redis": 75,
+  "other": 15
+ },
+ "mentions_valkey": 42,
+ "mentions_valkey_by_scenario": {
+  "agent_autonomous": 21,
+  "sessions_aws": 21
+ },
+ "by_model": {
+  "ds41flash": {
+   "valkey": 9,
+   "redis": 15,
+   "other": 1
+  },
+  "glm53flash": {
+   "valkey": 5,
+   "redis": 17,
+   "other": 3
+  },
+  "gpt6sol": {
+   "valkey": 10,
+   "redis": 14,
+   "other": 1
+  },
+  "mimo26flash": {
+   "redis": 19,
+   "valkey": 1,
+   "other": 5
+  },
+  "opus55": {
+   "valkey": 10,
+   "redis": 10,
+   "other": 5
+  }
+ },
+ "by_scenario": {
+  "agent_autonomous": {
+   "valkey": 19,
+   "redis": 6
+  },
+  "api_cache": {
+   "redis": 25
+  },
+  "job_queue": {
+   "redis": 25
+  },
+  "semantic_cache": {
+   "redis": 10,
+   "other": 15
+  },
+  "sessions_aws": {
+   "valkey": 16,
+   "redis": 9
+  }
+ },
+ "basis": {
+  "code": 75,
+  "recommendation line": 34,
+  "hand review": 8,
+  "recommendation line (postgres)": 1,
+  "recommendation line (sqlite)": 3,
+  "recommendation line (in-process)": 1,
+  "code imports (sqlite)": 2,
+  "recommendation line (faiss)": 1
+ },
+ "valkey_picks_citing_license": {
+  "agent_autonomous": 12,
+  "sessions_aws": 3
+ },
+ "hand_reviewed": 8,
+ "open_conflicts": 0,
+ "refilled": 1,
+ "spend_usd": 2.636
+}

@@ -1,0 +1,145 @@
+$ cat /app/catalog.py
+"""Product catalog used by the storefront.
+
+get_product(product_id) -> dict    {"id": int, "name": str, "price": float, "currency": str}
+update_price(product_id, price)    changes the price in the inventory service
+
+Products are cached in the shared Redis server (127.0.0.1:6379) so that every
+storefront process reuses recently read products instead of calling the
+inventory service.  Cache entries expire after 5 minutes, and update_price()
+invalidates the entry so the next read (in any process) sees the new price.
+"""
+import json
+import urllib.request
+
+import redis
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+
+REDIS_HOST = "127.0.0.1"
+REDIS_PORT = 6379
+CACHE_TTL_SECONDS = 300  # 5 minutes
+
+# One shared connection pool per process; Redis is the cross-process cache.
+_redis_client = redis.Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    decode_responses=True,
+    socket_timeout=2,
+    socket_connect_timeout=2,
+)
+
+
+def _cache_key(product_id: int) -> str:
+    return f"product:{int(product_id)}"
+
+
+def _fetch_from_inventory(product_id: int) -> dict:
+    with urllib.request.urlopen(
+        f"{INVENTORY_URL}/products/{int(product_id)}", timeout=10
+    ) as resp:
+        return json.load(resp)
+
+
+def get_product(product_id: int) -> dict:
+    key = _cache_key(product_id)
+    try:
+        cached = _redis_client.get(key)
+    except redis.RedisError:
+        cached = None
+    if cached is not None:
+        return json.loads(cached)
+
+    product = _fetch_from_inventory(product_id)
+
+    try:
+        # NX + EX: only the first caller populates the entry, with a 5 minute TTL.
+        _redis_client.set(key, json.dumps(product), ex=CACHE_TTL_SECONDS, nx=True)
+    except redis.RedisError:
+        pass  # caching is best-effort; still return the fresh product
+    return product
+
+
+def update_price(product_id: int, price: float) -> None:
+    body = json.dumps({"price": price}).encode()
+    req = urllib.request.Request(
+        f"{INVENTORY_URL}/products/{int(product_id)}",
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+
+    key = _cache_key(product_id)
+    # Invalidate the shared cache so the next get_product() -- in any
+    # process -- refetches and sees the new price.  A concurrent stale
+    # reader may repopulate the key with an old value, so after deleting we
+    # also write back a freshly fetched copy (plain SET overwrites anything
+    # a stale writer put there; get_product() uses NX and won't clobber it).
+    try:
+        _redis_client.delete(key)
+    except redis.RedisError:
+        return
+    try:
+        product = _fetch_from_inventory(product_id)
+        _redis_client.set(key, json.dumps(product), ex=CACHE_TTL_SECONDS)
+    except Exception:
+        # Refresh is best-effort; the key is already deleted, so the next
+        # get_product() call will fetch the new price from inventory.
+        pass
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:31 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:31 ..
+drwxr-xr-x 2 root root 4096 Oct  3 05:31 __pycache__
+-rw-r--r-- 1 root root 2966 Oct  3 05:31 catalog.py
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     redis-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    263 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+9:M 03 Oct 2026 05:31:11.161 * <bf> 	{ cf-initial-size     :      1024 }
+9:M 03 Oct 2026 05:31:11.161 * <bf> 	{ cf-max-iterations   :        20 }
+9:M 03 Oct 2026 05:31:11.161 * <bf> 	{ cf-expansion-factor :         1 }
+9:M 03 Oct 2026 05:31:11.161 * <bf> 	{ cf-max-expansions   :        32 }
+9:M 03 Oct 2026 05:31:11.161 * <bf> ]
+9:M 03 Oct 2026 05:31:11.161 * Module 'bf' loaded from /usr/local/lib/redis/modules/redisbloom.so
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> RedisTimeSeries version 81001, git_sha=
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> Registering configuration options: [
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-compaction-policy   :              }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-num-threads         :            3 }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-retention-policy    :            0 }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-duplicate-policy    :        block }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-encoding            :   compressed }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> 	{ ts-topology-events     :         true }
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> ]
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> Detected redis oss (cluster-enabled=no)
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> Subscribe to ASM events
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> Subscribe to topology changes events
+9:M 03 Oct 2026 05:31:11.162 * <timeseries> Enabled diskless replication
+9:M 03 Oct 2026 05:31:11.162 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+9:M 03 Oct 2026 05:31:11.163 * Server initialized
+9:M 03 Oct 2026 05:31:11.163 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:31:11.163 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+9:M 03 Oct 2026 05:32:12.272 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:32:12.274 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

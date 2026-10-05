@@ -1,0 +1,107 @@
+$ cat /app/catalog.py
+"""Product catalog used by the storefront.
+
+get_product(product_id) -> dict    {"id": int, "name": str, "price": float, "currency": str}
+update_price(product_id, price)    changes the price in the inventory service
+"""
+import json
+import urllib.request
+
+import valkey
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+_CACHE_TTL = 300  # seconds
+_cache = valkey.Valkey(host="127.0.0.1", port=6379, socket_connect_timeout=3, socket_timeout=3)
+
+
+def _keys(product_id: int) -> tuple[str, str]:
+    product_id = int(product_id)
+    return f"catalog:product:{product_id}", f"catalog:product-lock:{product_id}"
+
+
+def get_product(product_id: int) -> dict:
+    product_id = int(product_id)
+    key, lock_key = _keys(product_id)
+    # Serialize fills with price changes across processes. In particular, a
+    # slow inventory GET must not refill the cache after a successful PUT.
+    with _cache.lock(lock_key, timeout=30, blocking_timeout=30):
+        cached = _cache.get(key)
+        if cached is not None:
+            return json.loads(cached)
+
+        with urllib.request.urlopen(f"{INVENTORY_URL}/products/{product_id}", timeout=10) as resp:
+            product = json.load(resp)
+        _cache.set(key, json.dumps(product), ex=_CACHE_TTL)
+        return product
+
+
+def update_price(product_id: int, price: float) -> None:
+    product_id = int(product_id)
+    key, lock_key = _keys(product_id)
+    body = json.dumps({"price": price}).encode()
+    req = urllib.request.Request(
+        f"{INVENTORY_URL}/products/{product_id}",
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    with _cache.lock(lock_key, timeout=30, blocking_timeout=30):
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+        # Only invalidate after the inventory service has accepted the change.
+        _cache.delete(key)
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:11 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:10 ..
+drwxr-xr-x 2 root root 4096 Oct  3 05:11 __pycache__
+-rw-r--r-- 1 root root 1871 Oct  3 05:11 catalog.py
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    197 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: used_write_cpu Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: worker_pool_suspend_cnt Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: writer_queue_size Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: writer_resumed_cnt Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: writer_suspension_expired_cnt Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_deletes Flags:2
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_queries Flags:2
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_periods Flags:2
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_time Flags:2
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_upserts Flags:2
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_periods Flags:2
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_time Flags:2
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: cancel-timeouts Flags:6
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_deferred_entry_cnt Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [warning], tid: 132861498390336, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+9:M 03 Oct 2026 05:10:19.405 # <search> [notice], tid: 132861498390336, /vmsdk/src/module.cc:148: search module was successfully loaded!
+9:M 03 Oct 2026 05:10:19.405 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+9:M 03 Oct 2026 05:10:19.406 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+9:M 03 Oct 2026 05:10:19.406 * <bf> Created new data type 'bloomfltr'
+9:M 03 Oct 2026 05:10:19.406 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+9:M 03 Oct 2026 05:10:19.407 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+9:M 03 Oct 2026 05:10:19.408 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+9:M 03 Oct 2026 05:10:19.408 * Static Module 'lua' successfully loaded
+9:M 03 Oct 2026 05:10:19.408 * Server initialized
+9:M 03 Oct 2026 05:10:19.409 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:11:12.041 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

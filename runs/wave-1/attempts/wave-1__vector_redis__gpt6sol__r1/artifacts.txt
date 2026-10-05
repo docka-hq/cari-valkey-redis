@@ -1,0 +1,103 @@
+$ cat /app/search.py
+"""Print the five closest article IDs for a 64-dimensional query vector."""
+import json
+import struct
+import sys
+
+import redis
+
+
+def main():
+    vector = json.load(sys.stdin)
+    if not isinstance(vector, list) or len(vector) != 64:
+        raise ValueError('Expected a JSON list of 64 numbers')
+    blob = struct.pack('<64d', *vector)
+
+    client = redis.Redis(host='127.0.0.1', port=6379)
+    result = client.execute_command(
+        'FT.SEARCH', 'kb_articles', '*=>[KNN 5 @embedding $query AS distance]',
+        'PARAMS', 2, 'query', blob,
+        'SORTBY', 'distance', 'ASC',
+        'RETURN', 1, 'id',
+        'LIMIT', 0, 5,
+        'DIALECT', 2,
+    )
+    if isinstance(result, dict):
+        for hit in result[b'results']:
+            print(hit[b'extra_attributes'][b'id'].decode('utf-8'))
+    else:
+        for fields in result[2::2]:
+            values = dict(zip(fields[::2], fields[1::2]))
+            print(values[b'id'].decode('utf-8'))
+
+
+if __name__ == '__main__':
+    main()
+
+
+$ ls -la /app
+total 16
+drwxr-xr-x 1 root root 4096 Oct  3 05:12 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:12 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root  991 Oct  3 05:13 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+kb_articles
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+     10 root     redis-server 127.0.0.1:6379
+     11 root     python3 /opt/upstream/server.py
+    224 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+10:M 03 Oct 2026 05:12:32.543 * <bf> 	{ cf-max-expansions   :        32 }
+10:M 03 Oct 2026 05:12:32.543 * <bf> ]
+10:M 03 Oct 2026 05:12:32.544 * Module 'bf' loaded from /usr/local/lib/redis/modules/redisbloom.so
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> RedisTimeSeries version 81001, git_sha=
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> Registering configuration options: [
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-compaction-policy   :              }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-num-threads         :            3 }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-retention-policy    :            0 }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-duplicate-policy    :        block }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-encoding            :   compressed }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> 	{ ts-topology-events     :         true }
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> ]
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> Detected redis oss (cluster-enabled=no)
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> Subscribe to ASM events
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> Subscribe to topology changes events
+10:M 03 Oct 2026 05:12:32.545 * <timeseries> Enabled diskless replication
+10:M 03 Oct 2026 05:12:32.545 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+10:M 03 Oct 2026 05:12:32.545 * Server initialized
+10:M 03 Oct 2026 05:12:32.546 * Ready to accept connections tcp
+10:M 03 Oct 2026 05:12:32.546 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+10:M 03 Oct 2026 05:12:49.646 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 541224B
+10:M 03 Oct 2026 05:12:49.646 * <search> Successfully created index kb_articles
+10:M 03 Oct 2026 05:12:49.768 * <search> DocTable capacity increase from 1000 to 1501
+10:M 03 Oct 2026 05:12:55.578 * BGSAVE done, 1000 keys saved, 0 keys skipped, 607541 bytes written.
+10:M 03 Oct 2026 05:12:55.580 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

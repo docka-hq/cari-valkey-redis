@@ -1,0 +1,10 @@
+{
+ "config_sha": "8a4d920256260a214e5125f4ae38a8909ea7afb8d911a45d1061d501e9a8db1b",
+ "tasks_sha": "e1c2b833d6c444ba0fab95975e1572e132fce487dc1d3de7da597e540f7c521a",
+ "runner_sha": "a7121ef182ed6535598fb10f5521d630143325c9f85b0d23901a2aa6df43fefa",
+ "harness_commit": "6a88eb1d39be5cbb0dfcf10e871a8493afcd7739",
+ "images": {
+  "cari-kv-mig8:valkey-9.1": "sha256:76eb9f172fea9d850a6ccfe16c04c8456afb0660d004040e966fdedb4747d3a9"
+ },
+ "frozen_at": "2026-10-03T06:43:10+00:00"
+}

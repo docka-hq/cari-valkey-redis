@@ -1,0 +1,182 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the knowledge-base articles stored in Valkey.
+
+Usage:
+    python3 /app/search.py < query.json
+
+query.json holds a single query embedding: a JSON list of 64 floats
+(a JSON object with an "embedding" key is also accepted).
+
+Prints the ids of the 5 most similar articles (cosine similarity), most
+similar first, one per line.
+
+How it works
+------------
+All 1,000 articles live in Valkey as JSON documents under keys
+`kb:vec:<id>` (field `$.embedding`), indexed by the `kb:articles` vector
+index created with:
+
+    FT.CREATE kb:articles ON JSON PREFIX 1 kb:vec: SCHEMA $.embedding
+        AS embedding VECTOR FLAT 6 TYPE FLOAT32 DIM 64 DISTANCE_METRIC COSINE
+
+This script sends the query vector to Valkey and runs a KNN query *inside*
+the server:
+
+    FT.SEARCH kb:articles '*=>[KNN 5 @embedding $vec AS distance]'
+        PARAMS 2 vec <blob> DIALECT 2
+
+The FLAT algorithm performs an exact brute-force scan, so the top-5 by
+cosine distance (= 1 - cosine similarity) is the true top-5. Article
+titles/metadata are kept separately in hashes `kb:meta:<id>`; this script
+only needs the ids. Nothing is read from /data/articles.jsonl and no
+similarities are computed locally.
+"""
+
+import json
+import sys
+
+import numpy as np
+from valkey import Valkey
+
+INDEX_NAME = "kb:articles"
+KEY_PREFIX = "kb:vec:"
+DIM = 64
+K = 5
+QUERY_TEMPLATE = f"*=>[KNN {K} @embedding $vec AS distance]"
+
+
+def read_query_vector(stream) -> np.ndarray:
+    """Read one 64-float embedding from JSON text and return it as float32."""
+    obj = json.load(stream)
+    if isinstance(obj, dict):  # tolerate {"embedding": [...]}
+        obj = obj["embedding"]
+    if not isinstance(obj, list) or len(obj) != DIM:
+        raise ValueError(f"query must be a JSON list of {DIM} floats")
+    return np.asarray(obj, dtype=np.float32)
+
+
+def search(valkey: Valkey, query_vec: np.ndarray) -> list[tuple[str, float]]:
+    """Run the KNN query inside Valkey; return [(article_id, distance), ...]."""
+    raw = valkey.execute_command(
+        "FT.SEARCH", INDEX_NAME, QUERY_TEMPLATE,
+        "PARAMS", 2, "vec", query_vec.tobytes(),
+        "DIALECT", 2,
+    )
+    # Reply layout: [total, key1, attrs1, key2, attrs2, ...] where attrs is a
+    # flat list of (name, value) pairs; the score pair uses our alias
+    # ("distance") and the JSON document itself arrives under the "$" name.
+    total = int(raw[0])
+    results: list[tuple[str, float]] = []
+    for i in range(total):
+        key = raw[1 + 2 * i]
+        attrs = raw[2 + 2 * i] or []
+        article_id = key.decode()
+        if article_id.startswith(KEY_PREFIX):
+            article_id = article_id[len(KEY_PREFIX):]
+        distance = None
+        for j in range(0, len(attrs) - 1, 2):
+            name = attrs[j]
+            if isinstance(name, bytes) and name.decode() == "$":
+                continue
+            try:
+                distance = float(attrs[j + 1])
+            except (TypeError, ValueError):
+                distance = None
+            break
+        if distance is None:
+            distance = float(i)  # fall back to reply order
+        results.append((article_id, distance))
+    return results
+
+
+def main() -> int:
+    try:
+        query_vec = read_query_vector(sys.stdin)
+    except Exception as exc:
+        print(f"error reading query: {exc}", file=sys.stderr)
+        return 1
+    try:
+        valkey = Valkey(host="127.0.0.1", port=6379, db=0, decode_responses=False)
+        results = search(valkey, query_vec)
+    except Exception as exc:
+        print(f"error querying Valkey: {exc}", file=sys.stderr)
+        return 1
+    results.sort(key=lambda item: item[1])  # cosine distance: lower is better
+    for article_id, _ in results[:K]:
+        print(article_id)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:32 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:23 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 2683 Oct  3 05:31 load_articles.py
+-rwxr-xr-x 1 root root 3811 Oct  3 05:30 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+kb:articles
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=2000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+2000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    517 root     [valkey-server] <defunct>
+    731 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 05:28:42.012 # <module> [warning], tid: 139225808865088, /src/valkey_search.cc:1064: After fork parent callback, resume gRPC returned message: 
+9:M 03 Oct 2026 05:28:42.012 * Background saving started by pid 363
+363:C 03 Oct 2026 05:28:42.028 # <search> [notice], tid: 139225808865088, /src/rdb_serialization.cc:260: Saving 1 ValkeySearch RDB sections with minimum version 1.0.0
+363:C 03 Oct 2026 05:28:42.028 * <search> Saving aux metadata for SchemaManager to aux RDB
+363:C 03 Oct 2026 05:28:42.029 # <module> [notice], tid: 139225808865088, /src/index_schema.cc:1240: Starting RDB save for index schema: *redacted* Saving in version 2 format
+363:C 03 Oct 2026 05:28:42.029 # <module> [notice], tid: 139225808865088, /src/index_schema.cc:1268: Starting to save 1 attributes.
+363:C 03 Oct 2026 05:28:42.031 # <module> [notice], tid: 139225808865088, /src/index_schema.cc:1410: Writing Index Extension, keys = 1000
+363:C 03 Oct 2026 05:28:42.032 # <module> [notice], tid: 139225808865088, /src/index_schema.cc:1428: Writing mutation queue records = 0 Total queue:0
+363:C 03 Oct 2026 05:28:42.035 * DB saved on disk
+363:C 03 Oct 2026 05:28:42.037 * Fork CoW for RDB: current 2 MB, peak 2 MB, average 1 MB
+9:M 03 Oct 2026 05:28:42.113 * Background saving terminated with success
+9:M 03 Oct 2026 05:28:42.115 # <search> [warning], tid: 139225808865088, /src/valkey_search.cc:1222: Fork child died notification received. Resuming writer worker thread pool returned message:  Suspend duration: 102.475246ms
+9:M 03 Oct 2026 05:31:29.223 # <module> [warning], tid: 139225808865088, /src/valkey_search.cc:1030: At prepare fork callback, suspend writer worker thread pool returned message: 
+9:M 03 Oct 2026 05:31:29.224 # <module> [warning], tid: 139225808865088, /src/valkey_search.cc:1034: At prepare fork callback, suspend reader worker thread pool returned message: 
+9:M 03 Oct 2026 05:31:29.224 # <module> [warning], tid: 139225808865088, /src/valkey_search.cc:1038: At prepare fork callback, suspend utility worker thread pool returned message: 
+9:M 03 Oct 2026 05:31:29.224 # <module> [warning], tid: 139225808865088, /src/valkey_search.cc:1042: At prepare fork callback, suspend gRPC returned message: 
+9:M 03 Oct 2026 05:31:29.227 # <module> [warning], tid: 139225808865088, /src/valkey_search.cc:1055: After fork parent callback, resume reader worker thread pool returned message: 
+9:M 03 Oct 2026 05:31:29.228 # <module> [warning], tid: 139225808865088, /src/valkey_search.cc:1059: After fork parent callback, resume utility worker thread pool returned message: 
+9:M 03 Oct 2026 05:31:29.228 # <module> [warning], tid: 139225808865088, /src/valkey_search.cc:1064: After fork parent callback, resume gRPC returned message: 
+9:M 03 Oct 2026 05:31:29.228 * Background saving started by pid 458
+458:C 03 Oct 2026 05:31:29.243 # <search> [notice], tid: 139225808865088, /src/rdb_serialization.cc:260: Saving 1 ValkeySearch RDB sections with minimum version 1.0.0
+458:C 03 Oct 2026 05:31:29.243 * <search> Saving aux metadata for SchemaManager to aux RDB
+458:C 03 Oct 2026 05:31:29.243 # <module> [notice], tid: 139225808865088, /src/index_schema.cc:1240: Starting RDB save for index schema: *redacted* Saving in version 2 format
+458:C 03 Oct 2026 05:31:29.243 # <module> [notice], tid: 139225808865088, /src/index_schema.cc:1268: Starting to save 1 attributes.
+458:C 03 Oct 2026 05:31:29.246 # <module> [notice], tid: 139225808865088, /src/index_schema.cc:1410: Writing Index Extension, keys = 1000
+458:C 03 Oct 2026 05:31:29.246 # <module> [notice], tid: 139225808865088, /src/index_schema.cc:1428: Writing mutation queue records = 0 Total queue:0
+458:C 03 Oct 2026 05:31:29.249 * DB saved on disk
+458:C 03 Oct 2026 05:31:29.251 * Fork CoW for RDB: current 2 MB, peak 2 MB, average 1 MB
+9:M 03 Oct 2026 05:31:29.288 * Background saving terminated with success
+9:M 03 Oct 2026 05:31:29.288 # <search> [warning], tid: 139225808865088, /src/valkey_search.cc:1222: Fork child died notification received. Resuming writer worker thread pool returned message:  Suspend duration: 60.617422ms
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

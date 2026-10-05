@@ -1,0 +1,187 @@
+$ cat /app/catalog.py
+"""Product catalog used by the storefront.
+
+get_product(product_id) -> dict    {"id": int, "name": str, "price": float, "currency": str}
+update_price(product_id, price)    changes the price in the inventory service
+
+Products are cached in Valkey (127.0.0.1:6379), so recent reads are served from
+the cache instead of the ~300 ms inventory service, and every storefront
+process shares the same cache.  Cached products expire after CACHE_TTL seconds.
+update_price() replaces the cache entry with the value the inventory service
+returns, so the next get_product() in any process sees the new price.
+"""
+import json
+import time
+import urllib.error
+import urllib.request
+
+try:  # valkey-py is an API-compatible fork of redis-py; prefer it if installed
+    import valkey as _client_mod
+except ImportError:  # pragma: no cover - fall back to redis-py
+    import redis as _client_mod
+
+# Base class of every error the client library raises (connection, timeout, ...);
+# cache trouble must degrade to an upstream read, never break the storefront.
+# (valkey-py names it ValkeyError, redis-py RedisError.)
+_ClientError = (
+    getattr(_client_mod.exceptions, "ValkeyError", None)
+    or getattr(_client_mod.exceptions, "RedisError", None)
+    or Exception  # last resort for an exotic client: degrade on anything
+)
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+VALKEY_HOST = "127.0.0.1"
+VALKEY_PORT = 6379
+VALKEY_DB = 0
+CACHE_TTL = 300  # seconds a cached product stays fresh
+
+_CACHE_PREFIX = "catalog:product:"
+# Swap the key to ARGV[1] unless it already holds exactly that value (a
+# concurrent update may have set it first); respawns with TTL if missing.
+_SWAP_IF_NOT_NEW = (
+    "if redis.call('get', KEYS[1]) ~= ARGV[1] then "
+    "redis.call('set', KEYS[1], ARGV[1], 'EX', ARGV[2]) end"
+)
+_Client = getattr(_client_mod, "Valkey", _client_mod.Redis)
+_client = _Client(
+    host=VALKEY_HOST,
+    port=VALKEY_PORT,
+    db=VALKEY_DB,
+    decode_responses=True,
+    socket_connect_timeout=2,
+    socket_timeout=2,
+)
+
+
+def _key(product_id: int) -> str:
+    return f"{_CACHE_PREFIX}{int(product_id)}"
+
+
+def _fetch_product(product_id: int) -> dict:
+    """Read one product from the inventory service."""
+    with urllib.request.urlopen(
+        f"{INVENTORY_URL}/products/{int(product_id)}", timeout=10
+    ) as resp:
+        return json.load(resp)
+
+
+def get_product(product_id: int) -> dict:
+    """Return the product, serving recent reads from the shared Valkey cache."""
+    key = _key(product_id)
+    try:
+        cached = _client.get(key)
+        if cached is not None:
+            return json.loads(cached)
+    except (_ClientError, ValueError):  # noqa: BLE001
+        pass  # cache down or payload unreadable: fall through to the upstream
+    product = _fetch_product(product_id)  # HTTPError/URLError propagate as before
+    try:
+        # NX: if another process cached a newer value while we were fetching,
+        # keep theirs instead of overwriting it.
+        _client.set(key, json.dumps(product), ex=CACHE_TTL, nx=True)
+    except _ClientError:
+        pass  # serve the value even if caching failed
+    return product
+
+
+def update_price(product_id: int, price: float) -> None:
+    """Change the price upstream and refresh the cached product everywhere."""
+    key = _key(product_id)
+    body = json.dumps({"price": price}).encode()
+    req = urllib.request.Request(
+        f"{INVENTORY_URL}/products/{int(product_id)}",
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    updated = None
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            updated = json.load(resp)  # PUT response is the new product state
+    except urllib.error.HTTPError:
+        try:
+            _client.delete(key)  # do not keep serving a product that is gone
+        except _ClientError:
+            pass
+        raise
+    if not isinstance(updated, dict):  # unparseable PUT body: drop the cache entry
+        try:
+            _client.delete(key)
+        except _ClientError:
+            pass
+        return
+    # Refresh the cache entry to the new product.  The SET NX first (so a
+    # concurrent get_product's own SET NX cannot interpose a stale refill) and
+    # the atomic swap second (so a concurrent get_product's refill, if any,
+    # cannot survive the swap) - whichever way the calls interleave, the key
+    # ends up holding the new price and stays present.
+    payload = json.dumps(updated)
+    for attempt in range(3):
+        try:
+            _client.set(key, payload, ex=CACHE_TTL, nx=True)
+            _client.eval(_SWAP_IF_NOT_NEW, 1, key, payload, CACHE_TTL)
+            break
+        except _ClientError:
+            if attempt == 2:
+                try:  # last resort: at least drop any stale entry
+                    _client.delete(key)
+                except _ClientError:
+                    pass  # worst case it expires with its TTL
+                break
+            time.sleep(0.05 * (attempt + 1))
+
+
+$ ls -la /app
+total 28
+drwxr-xr-x 1 root root 4096 Oct  3 05:20 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:10 ..
+drwxr-xr-x 2 root root 4096 Oct  3 05:20 __pycache__
+-rw-r--r-- 1 root root 4983 Oct  3 05:20 catalog.py
+-rw-r--r-- 1 root root  845 Oct  3 05:14 catalog.py.orig
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+   1104 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_deletes Flags:2
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_queries Flags:2
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_periods Flags:2
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_time Flags:2
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_upserts Flags:2
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_periods Flags:2
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_time Flags:2
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: cancel-timeouts Flags:6
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_deferred_entry_cnt Flags:1
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+9:M 03 Oct 2026 05:10:23.398 # <search> [warning], tid: 139596938929984, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+9:M 03 Oct 2026 05:10:23.398 # <search> [notice], tid: 139596938929984, /vmsdk/src/module.cc:148: search module was successfully loaded!
+9:M 03 Oct 2026 05:10:23.398 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+9:M 03 Oct 2026 05:10:23.399 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+9:M 03 Oct 2026 05:10:23.399 * <bf> Created new data type 'bloomfltr'
+9:M 03 Oct 2026 05:10:23.399 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+9:M 03 Oct 2026 05:10:23.399 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+9:M 03 Oct 2026 05:10:23.400 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+9:M 03 Oct 2026 05:10:23.401 * Static Module 'lua' successfully loaded
+9:M 03 Oct 2026 05:10:23.401 * Server initialized
+9:M 03 Oct 2026 05:10:23.401 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:17:35.863 * 100 changes in 300 seconds. Saving...
+9:M 03 Oct 2026 05:17:35.865 * Background saving started by pid 582
+582:C 03 Oct 2026 05:17:35.868 * DB saved on disk
+582:C 03 Oct 2026 05:17:35.870 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+9:M 03 Oct 2026 05:17:35.966 * Background saving terminated with success
+9:M 03 Oct 2026 05:20:49.226 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

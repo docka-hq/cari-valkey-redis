@@ -1,0 +1,92 @@
+[
+ {
+  "in": 4,
+  "cache_write": 383,
+  "cache_read": 538,
+  "out": 228,
+  "cost": 0.0065986000000000005,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1045,
+  "cache_read": 921,
+  "out": 452,
+  "cost": 0.0144572,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 583,
+  "cache_read": 1966,
+  "out": 770,
+  "cost": 0.018716200000000002,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 823,
+  "cache_read": 2549,
+  "out": 464,
+  "cost": 0.0139128,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 3175,
+  "cache_read": 3372,
+  "out": 118,
+  "cost": 0.0189174,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 213,
+  "cache_read": 6547,
+  "out": 264,
+  "cost": 0.0076624,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1092,
+  "cache_read": 6760,
+  "out": 888,
+  "cost": 0.02458,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 945,
+  "cache_read": 7852,
+  "out": 179,
+  "cost": 0.009883399999999999,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 310,
+  "cache_read": 8797,
+  "out": 509,
+  "cost": 0.0134974,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "end_turn"
+ }
+]

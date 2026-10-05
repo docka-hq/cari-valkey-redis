@@ -1,0 +1,116 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the knowledge-base articles stored in Valkey.
+
+Reads a query embedding (JSON list of 64 floats) from stdin, runs a
+cosine-similarity vector search inside Valkey (valkey-search module,
+FT.SEARCH over a FLAT vector index), and prints the ids of the 5 most
+similar articles, most similar first.
+"""
+import json
+import struct
+import sys
+
+try:
+    import valkey as client_lib
+except ImportError:
+    import redis as client_lib
+
+TOP_K = 5
+
+
+def main():
+    query = json.load(sys.stdin)
+    # binary float32 encoding of the query vector, as expected by FT.SEARCH
+    vec = struct.pack("<%df" % len(query), *query)
+
+    r = client_lib.Valkey(host="127.0.0.1", port=6379, decode_responses=False)
+    res = r.execute_command(
+        "FT.SEARCH", "articles", "*=>[KNN 5 @embedding $vec]",
+        "PARAMS", "2", "vec", vec,
+        "LIMIT", "0", str(TOP_K),
+        "RETURN", "1", "id",
+        "DIALECT", "2",
+    )
+
+    # reply: [total, key1, [field, value, ...], key2, ...]
+    out = sys.stdout
+    it = iter(res[1:])
+    for key in it:
+        fields = next(it)
+        attrs = dict(zip(fields[0::2], fields[1::2]))
+        out.write(attrs[b"id"].decode() + "\n")
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:13 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:13 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1521 Oct  3 05:13 load.py
+-rwxr-xr-x 1 root root 1245 Oct  3 05:13 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+articles
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     [valkey-server] <defunct>
+     10 root     python3 /opt/upstream/server.py
+    250 root     valkey-server 127.0.0.1:6379
+    359 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+250:M 03 Oct 2026 05:13:46.501 # <search> [warning], tid: 129749594560320, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+250:M 03 Oct 2026 05:13:46.501 # <search> [warning], tid: 129749594560320, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+250:M 03 Oct 2026 05:13:46.501 # <search> [warning], tid: 129749594560320, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+250:M 03 Oct 2026 05:13:46.501 # <search> [warning], tid: 129749594560320, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+250:M 03 Oct 2026 05:13:46.501 # <search> [warning], tid: 129749594560320, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+250:M 03 Oct 2026 05:13:46.501 # <search> [notice], tid: 129749594560320, /vmsdk/src/module.cc:148: search module was successfully loaded!
+250:M 03 Oct 2026 05:13:46.501 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+250:M 03 Oct 2026 05:13:46.501 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+250:M 03 Oct 2026 05:13:46.501 * <bf> Created new data type 'bloomfltr'
+250:M 03 Oct 2026 05:13:46.502 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+250:M 03 Oct 2026 05:13:46.502 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+250:M 03 Oct 2026 05:13:46.503 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+250:M 03 Oct 2026 05:13:46.503 * Static Module 'lua' successfully loaded
+250:M 03 Oct 2026 05:13:46.504 * Server initialized
+250:M 03 Oct 2026 05:13:46.504 * Cleaning slot migration log in anticipation of a load operation.
+250:M 03 Oct 2026 05:13:46.504 * Loading RDB produced by Valkey version 9.1.2
+250:M 03 Oct 2026 05:13:46.504 * RDB age 2 seconds
+250:M 03 Oct 2026 05:13:46.504 * RDB memory usage when created 8.11 Mb
+250:M 03 Oct 2026 05:13:46.506 # <search> [notice], tid: 129749594560320, /src/rdb_serialization.cc:166: Loading RDB from version: 1.2.0 with 1 sections.
+250:M 03 Oct 2026 05:13:46.509 # <search> [notice], tid: 129749594560320, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 1000)
+250:M 03 Oct 2026 05:13:46.513 # <search> [notice], tid: 129749594560320, /src/index_schema.cc:1468: Loading Index Extension, keys = 1000
+250:M 03 Oct 2026 05:13:46.521 # <search> [notice], tid: 129749594560320, /src/index_schema.cc:1530: Loading Mutation Entries, entries = 0
+250:M 03 Oct 2026 05:13:46.521 # <search> [notice], tid: 129749594560320, /src/index_schema.cc:1543: Loading Multi/Exec Entries, entries = 0
+250:M 03 Oct 2026 05:13:46.521 # <search> [notice], tid: 129749594560320, /src/index_schema.cc:1679: Loaded index schema with 3 attributes
+250:M 03 Oct 2026 05:13:46.521 # <search> [notice], tid: 129749594560320, /src/schema_manager.cc:712: Loading index from RDB: *redacted* (in db 0)
+250:M 03 Oct 2026 05:13:46.521 * Done loading RDB, keys loaded: 1000, keys expired: 0, all fields expired hashes: 0.
+250:M 03 Oct 2026 05:13:46.521 # <search> [notice], tid: 129749594560320, /src/index_schema.cc:1736: RDB load completed,  Mutation Queue contains 747 entries. Backfill not needed.
+250:M 03 Oct 2026 05:13:46.521 # <search> [notice], tid: 129749594560320, /src/index_schema.cc:1720: Draining Mutation Queue for index *redacted*, entries remaining: 745
+250:M 03 Oct 2026 05:13:46.536 * DB loaded from disk: 0.032 seconds
+250:M 03 Oct 2026 05:13:46.536 * Ready to accept connections tcp
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

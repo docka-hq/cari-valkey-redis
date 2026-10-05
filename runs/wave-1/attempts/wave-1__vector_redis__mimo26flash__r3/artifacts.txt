@@ -1,0 +1,114 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the article vector index in Redis.
+
+Usage:  python3 /app/search.py < query.json
+
+query.json contains one query embedding (a JSON list of 64 floats).
+Prints the ids of the 5 most similar articles (cosine similarity),
+one per line, most similar first.
+
+The similarity search runs inside Redis (RediSearch KNN query);
+this script neither reads the article file nor computes similarities.
+"""
+import json
+import struct
+import sys
+
+import redis
+
+INDEX = "articles"
+TOP_K = 5
+
+def main() -> None:
+    query = json.load(sys.stdin)  # list of 64 floats
+    vec = struct.pack("<%df" % len(query), *query)
+
+    r = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
+    res = r.execute_command(
+        "FT.SEARCH", INDEX,
+        "*=>[KNN %d @embedding $vec AS score]" % TOP_K,
+        "PARAMS", "2", "vec", vec,
+        "SORTBY", "score", "ASC",
+        "RETURN", "1", "id",
+        "DIALECT", "2",
+    )
+
+    results = res["results"] if isinstance(res, dict) else res[2::2]
+    for item in results:
+        if isinstance(item, dict):
+            sys.stdout.write(item["extra_attributes"]["id"] + "\n")
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:55 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:54 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1436 Oct  3 05:54 load.py
+-rwxr-xr-x 1 root root 1194 Oct  3 05:55 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+t2
+articles
+t1
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     redis-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    295 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+9:M 03 Oct 2026 05:54:07.841 * Module 'bf' loaded from /usr/local/lib/redis/modules/redisbloom.so
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> RedisTimeSeries version 81001, git_sha=
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> Registering configuration options: [
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-compaction-policy   :              }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-num-threads         :            3 }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-retention-policy    :            0 }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-duplicate-policy    :        block }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-encoding            :   compressed }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> 	{ ts-topology-events     :         true }
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> ]
+9:M 03 Oct 2026 05:54:07.841 * <timeseries> Detected redis oss (cluster-enabled=no)
+9:M 03 Oct 2026 05:54:07.842 * <timeseries> Subscribe to ASM events
+9:M 03 Oct 2026 05:54:07.842 * <timeseries> Subscribe to topology changes events
+9:M 03 Oct 2026 05:54:07.842 * <timeseries> Enabled diskless replication
+9:M 03 Oct 2026 05:54:07.842 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+9:M 03 Oct 2026 05:54:07.842 * Server initialized
+9:M 03 Oct 2026 05:54:07.842 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:54:07.842 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+9:M 03 Oct 2026 05:54:33.900 * <search> Creating vector index of type HNSW. Required memory for a block of 1024 vectors: 447424B
+9:M 03 Oct 2026 05:54:33.900 * <search> Successfully created index t2
+9:M 03 Oct 2026 05:54:33.905 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 279080B
+9:M 03 Oct 2026 05:54:33.905 * <search> Successfully created index t1
+9:M 03 Oct 2026 05:54:37.334 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 279080B
+9:M 03 Oct 2026 05:54:37.334 * <search> Successfully created index articles
+9:M 03 Oct 2026 05:54:37.353 * <search> DocTable capacity increase from 1000 to 1501
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

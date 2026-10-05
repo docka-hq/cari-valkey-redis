@@ -1,0 +1,117 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over 1,000 KB articles stored in Redis.
+
+Reads a query embedding (JSON list of 64 floats) from stdin and prints the ids
+of the 5 most similar articles (cosine similarity, most similar first).
+
+The similarity search runs inside Redis via a RediSearch KNN vector query;
+this script never reads the source data file nor computes any similarity.
+"""
+import json
+import struct
+import sys
+
+import redis
+
+REDIS_HOST = "127.0.0.1"
+REDIS_PORT = 6379
+INDEX = "articles_idx"
+DIM = 64
+TOP_K = 5
+
+
+def main() -> None:
+    query = json.load(sys.stdin)
+    if not isinstance(query, list) or len(query) != DIM:
+        raise SystemExit(f"expected a JSON list of {DIM} floats on stdin")
+    # pack to little-endian float32 bytes for the Redis vector param
+    vec = struct.pack(f"<{DIM}f", *(float(x) for x in query))
+
+    r = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=False)
+    res = r.execute_command(
+        "FT.SEARCH", INDEX,
+        f"*=>[KNN {TOP_K} @embedding $vec AS dist]",
+        "PARAMS", "2", "vec", vec,
+        "SORTBY", "dist",
+        "LIMIT", "0", str(TOP_K),
+        "DIALECT", "2",
+        "RETURN", "1", "id",
+    )
+
+    for item in res.get(b"results", []):
+        article_id = item[b"extra_attributes"][b"id"]
+        sys.stdout.buffer.write(article_id + b"\n")
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:33 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:32 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1113 Oct  3 05:32 load.py
+-rwxr-xr-x 1 root root 1374 Oct  3 05:33 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+articles_idx
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+     10 root     redis-server 127.0.0.1:6379
+     11 root     python3 /opt/upstream/server.py
+    264 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+10:M 03 Oct 2026 05:32:44.013 * <timeseries> RedisTimeSeries version 81001, git_sha=
+10:M 03 Oct 2026 05:32:44.013 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+10:M 03 Oct 2026 05:32:44.013 * <timeseries> Registering configuration options: [
+10:M 03 Oct 2026 05:32:44.013 * <timeseries> 	{ ts-compaction-policy   :              }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-num-threads         :            3 }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-retention-policy    :            0 }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-duplicate-policy    :        block }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-encoding            :   compressed }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> 	{ ts-topology-events     :         true }
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> ]
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> Detected redis oss (cluster-enabled=no)
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> Subscribe to ASM events
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> Subscribe to topology changes events
+10:M 03 Oct 2026 05:32:44.014 * <timeseries> Enabled diskless replication
+10:M 03 Oct 2026 05:32:44.014 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+10:M 03 Oct 2026 05:32:44.014 * Server initialized
+10:M 03 Oct 2026 05:32:44.014 * Ready to accept connections tcp
+10:M 03 Oct 2026 05:32:44.014 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+10:M 03 Oct 2026 05:32:58.885 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 279080B
+10:M 03 Oct 2026 05:32:58.885 * <search> Successfully created index articles_idx
+10:M 03 Oct 2026 05:32:58.904 * <search> DocTable capacity increase from 1000 to 1501
+10:M 03 Oct 2026 05:33:13.451 * Background saving started by pid 181
+181:C 03 Oct 2026 05:33:13.458 * BGSAVE done, 1000 keys saved, 0 keys skipped, 348531 bytes written.
+181:C 03 Oct 2026 05:33:13.459 * DB saved on disk
+181:C 03 Oct 2026 05:33:13.461 * Fork CoW for RDB: current 1 MB, peak 1 MB, average 1 MB
+10:M 03 Oct 2026 05:33:13.516 * Background saving terminated with success
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

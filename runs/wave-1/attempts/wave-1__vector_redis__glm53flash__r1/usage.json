@@ -1,0 +1,178 @@
+[
+ {
+  "in": 527,
+  "out": 1629,
+  "reasoning": 1505,
+  "cached": 0,
+  "cost": 0.00089355,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Modal",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1110,
+  "out": 787,
+  "reasoning": 528,
+  "cached": 0,
+  "cost": 0.00056,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Modal",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1399,
+  "out": 118,
+  "reasoning": 42,
+  "cached": 0,
+  "cost": 0.00026885,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Modal",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1509,
+  "out": 238,
+  "reasoning": 102,
+  "cached": 0,
+  "cost": 0.00034535,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Modal",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1694,
+  "out": 45,
+  "reasoning": 21,
+  "cached": 0,
+  "cost": 0.0002766,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Modal",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3106,
+  "out": 385,
+  "reasoning": 218,
+  "cached": 0,
+  "cost": 0.0006584,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Modal",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3302,
+  "out": 200,
+  "reasoning": 26,
+  "cached": 512,
+  "cost": 0.00053386,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Modal",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3532,
+  "out": 228,
+  "reasoning": 64,
+  "cached": 3072,
+  "cost": 0.00027516,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Modal",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3745,
+  "out": 232,
+  "reasoning": 66,
+  "cached": 0,
+  "cost": 0.00031147,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3965,
+  "out": 374,
+  "reasoning": 201,
+  "cached": 3712,
+  "cost": 0.000399366,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4233,
+  "out": 847,
+  "reasoning": 359,
+  "cached": 0,
+  "cost": 0.000702918,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4766,
+  "out": 1330,
+  "reasoning": 737,
+  "cached": 0,
+  "cost": 0.001017236,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5411,
+  "out": 392,
+  "reasoning": 49,
+  "cached": 0,
+  "cost": 0.000484106,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6157,
+  "out": 270,
+  "reasoning": 113,
+  "cached": 5376,
+  "cost": 0.00043447,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6401,
+  "out": 769,
+  "reasoning": 441,
+  "cached": 3904,
+  "cost": 0.000748038,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6816,
+  "out": 402,
+  "reasoning": 1,
+  "cached": 4736,
+  "cost": 0.000545264,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "InferenceNet",
+  "stop": "stop"
+ }
+]

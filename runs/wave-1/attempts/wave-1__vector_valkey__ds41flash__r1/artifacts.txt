@@ -1,0 +1,127 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the knowledge-base articles stored in Valkey.
+
+Usage:  python3 /app/search.py < query.json
+
+`query.json` is a JSON list of 64 floats (the query embedding). The script
+prints the ids of the 5 articles most similar to the query, one per line, most
+similar first.
+
+All similarity computation happens *inside* Valkey: this script only sends the
+query vector to the server and runs an FT.SEARCH KNN query against the
+`articles` vector index (which was built by /app/load_articles.py). It never
+reads /data/articles.jsonl and never computes cosine similarities itself.
+"""
+import json
+import struct
+import sys
+
+import valkey
+
+INDEX_NAME = "articles"
+VECTOR_FIELD = "embedding"
+DIM = 64
+TOP_K = 5
+
+
+def main():
+    query = json.loads(sys.stdin.read())
+    if not isinstance(query, list) or len(query) != DIM:
+        raise SystemExit(
+            "query.json must be a JSON list of %d floats" % DIM
+        )
+    query_blob = struct.pack("<%df" % DIM, *[float(x) for x in query])
+
+    client = valkey.Valkey(host="127.0.0.1", port=6379, decode_responses=True)
+
+    # KNN search executed server-side by the valkey-search module; results come
+    # back already sorted by (cosine) distance, closest first.
+    reply = client.execute_command(
+        "FT.SEARCH", INDEX_NAME,
+        "*=>[KNN %d @%s $vec]" % (TOP_K, VECTOR_FIELD),
+        "PARAMS", "2", "vec", query_blob,
+        "RETURN", "1", "id",
+        "DIALECT", "2",
+    )
+
+    # reply = [count, key1, [field, value, ...], key2, [field, value, ...], ...]
+    docs = reply[1:]
+    for i in range(0, len(docs), 2):
+        fields = docs[i + 1]
+        fmap = dict(zip(fields[0::2], fields[1::2]))
+        print(fmap["id"])
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:22 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:21 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 2591 Oct  3 05:22 load_articles.py
+-rw-r--r-- 1 root root 1758 Oct  3 05:22 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+articles
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     [valkey-server] <defunct>
+     10 root     python3 /opt/upstream/server.py
+    254 root     valkey-server 127.0.0.1:6379
+    377 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+254:M 03 Oct 2026 05:22:34.892 * Server initialized
+254:M 03 Oct 2026 05:22:34.892 * Cleaning slot migration log in anticipation of a load operation.
+254:M 03 Oct 2026 05:22:34.893 * Loading RDB produced by Valkey version 9.1.2
+254:M 03 Oct 2026 05:22:34.893 * RDB age 3 seconds
+254:M 03 Oct 2026 05:22:34.893 * RDB memory usage when created 9.69 Mb
+254:M 03 Oct 2026 05:22:34.895 # <search> [notice], tid: 139991942399808, /src/rdb_serialization.cc:166: Loading RDB from version: 1.2.0 with 2 sections.
+254:M 03 Oct 2026 05:22:34.898 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 1000)
+254:M 03 Oct 2026 05:22:34.901 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1468: Loading Index Extension, keys = 1000
+254:M 03 Oct 2026 05:22:34.907 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1530: Loading Mutation Entries, entries = 0
+254:M 03 Oct 2026 05:22:34.907 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1543: Loading Multi/Exec Entries, entries = 0
+254:M 03 Oct 2026 05:22:34.908 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1679: Loaded index schema with 3 attributes
+254:M 03 Oct 2026 05:22:34.908 # <search> [notice], tid: 139991942399808, /src/schema_manager.cc:712: Loading index from RDB: *redacted* (in db 0)
+254:M 03 Oct 2026 05:22:34.910 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1468: Loading Index Extension, keys = 1000
+254:M 03 Oct 2026 05:22:34.924 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1530: Loading Mutation Entries, entries = 0
+254:M 03 Oct 2026 05:22:34.924 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1543: Loading Multi/Exec Entries, entries = 0
+254:M 03 Oct 2026 05:22:34.925 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1679: Loaded index schema with 3 attributes
+254:M 03 Oct 2026 05:22:34.925 # <search> [notice], tid: 139991942399808, /src/schema_manager.cc:712: Loading index from RDB: *redacted* (in db 0)
+254:M 03 Oct 2026 05:22:34.925 * Done loading RDB, keys loaded: 1000, keys expired: 0, all fields expired hashes: 0.
+254:M 03 Oct 2026 05:22:34.925 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1736: RDB load completed,  Mutation Queue contains 0 entries. Backfill not needed.
+254:M 03 Oct 2026 05:22:34.925 # <search> [notice], tid: 139991942399808, /src/index_schema.cc:1736: RDB load completed,  Mutation Queue contains 0 entries. Backfill not needed.
+254:M 03 Oct 2026 05:22:34.925 * DB loaded from disk: 0.033 seconds
+254:M 03 Oct 2026 05:22:34.926 * Ready to accept connections tcp
+254:M 03 Oct 2026 05:22:41.876 # <search> [notice], tid: 139991690761920, /src/index_schema.cc:334: Index schema *redacted* dropped from DB 0
+254:M 03 Oct 2026 05:22:44.051 # <search> [notice], tid: 139991942399808, /src/rdb_serialization.cc:260: Saving 1 ValkeySearch RDB sections with minimum version 1.2.0
+254:M 03 Oct 2026 05:22:44.051 * <search> Saving aux metadata for SchemaManager to aux RDB
+254:M 03 Oct 2026 05:22:44.051 # <module> [notice], tid: 139991942399808, /src/index_schema.cc:1240: Starting RDB save for index schema: *redacted* Saving in version 2 format
+254:M 03 Oct 2026 05:22:44.051 # <module> [notice], tid: 139991942399808, /src/index_schema.cc:1268: Starting to save 3 attributes.
+254:M 03 Oct 2026 05:22:44.054 # <module> [notice], tid: 139991942399808, /src/index_schema.cc:1410: Writing Index Extension, keys = 1000
+254:M 03 Oct 2026 05:22:44.055 # <module> [notice], tid: 139991942399808, /src/index_schema.cc:1428: Writing mutation queue records = 0 Total queue:0
+254:M 03 Oct 2026 05:22:44.057 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

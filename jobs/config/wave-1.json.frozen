@@ -1,0 +1,13 @@
+{
+ "config_sha": "2ceeaddc7ff611359157eff73391fe3fd98ed42fe96355440b384eecc270266c",
+ "tasks_sha": "da9e8ec3292599037885d825b457a8ce72dfdecf867e8c3d4801e81d832b1c01",
+ "runner_sha": "8591070baaf04e2ad2fb4d137d9dd345698919c5b2c97a005faa94c8b553b01e",
+ "harness_commit": "6a88eb1d39be5cbb0dfcf10e871a8493afcd7739",
+ "images": {
+  "cari-kv-app:valkey-9.1": "sha256:d2894405798cca2a075ef5d92e264d9ebfc658045c7cdb8ca97d20263d38b51c",
+  "cari-kv-app:redis-8.10": "sha256:895bb7230c3549e3461befc0bb9bf22812d8fac44581392cd1f5e444dbaf29d2",
+  "cari-kv-mig:valkey-9.1": "sha256:f5998c7b033bf9492a1902d3e3097aaf6ddb27f4e40d9a4c9b9341ef1a950d2d",
+  "cari-kv-mig:redis-8.10": "sha256:d5579d71c210542654e674a9f24a4ac7039703e7fd3eddba265f3abe536f4965"
+ },
+ "frozen_at": "2026-10-03T05:10:07+00:00"
+}

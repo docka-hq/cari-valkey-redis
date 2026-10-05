@@ -1,0 +1,130 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the knowledge-base articles stored in Redis.
+
+Usage:  python3 /app/search.py < query.json
+
+query.json holds one query embedding: a JSON list of 64 floats.
+Prints the ids of the 5 most similar articles (cosine similarity),
+one per line, most similar first.
+
+All similarity math runs inside Redis: the articles' embeddings live in
+Redis hashes and the KNN search is executed by the RediSearch FLAT
+vector index (exact search, COSINE distance).  This script only forwards
+the query vector and prints the ids Redis returns.
+"""
+import json
+import struct
+import sys
+
+import redis
+
+HOST = "127.0.0.1"
+PORT = 6379
+INDEX_NAME = "articles:idx"
+DIM = 64
+K = 5
+
+
+def main() -> None:
+    query = json.load(sys.stdin)
+    if isinstance(query, dict):  # tolerate {"embedding": [...]}
+        query = query.get("embedding")
+    if not isinstance(query, list) or len(query) != DIM:
+        raise SystemExit(f"query must be a JSON list of {DIM} floats")
+
+    qblob = struct.pack(f"<{DIM}d", *query)  # native little-endian doubles
+
+    r = redis.Redis(host=HOST, port=PORT)
+    try:
+        res = r.execute_command(
+            "FT.SEARCH", INDEX_NAME,
+            f"*=>[KNN {K} @embedding $q]",
+            "RETURN", 1, "id",
+            "SORTBY", "__embedding_score", "ASC",  # ascending cosine distance
+            "LIMIT", 0, K,
+            "PARAMS", 2, "q", qblob,
+            "DIALECT", 2,
+        )
+    except redis.exceptions.ResponseError as e:
+        raise SystemExit(f"Redis vector search failed: {e}")
+
+    rows = res[b"results"]
+    if len(rows) < K:
+        raise SystemExit(f"index {INDEX_NAME!r} returned only {len(rows)} of {K} results")
+
+    for row in rows[:K]:
+        print(row[b"extra_attributes"][b"id"].decode())
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 07:28 .
+drwxr-xr-x 1 root root 4096 Oct  3 07:16 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 2286 Oct  3 07:30 load_articles.py
+-rwxr-xr-x 1 root root 1808 Oct  3 07:28 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+articles:idx
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     redis-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    574 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+9:M 03 Oct 2026 07:23:24.919 * <search> Scanning index test:idx in background: done (scanned=6)
+9:M 03 Oct 2026 07:24:14.513 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 541224B
+9:M 03 Oct 2026 07:24:14.513 * <search> Successfully created index test:idx
+9:M 03 Oct 2026 07:24:14.513 * <search> Scanning index test:idx in background
+9:M 03 Oct 2026 07:24:14.514 * <search> Scanning index test:idx in background: done (scanned=9)
+9:M 03 Oct 2026 07:25:06.284 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 541224B
+9:M 03 Oct 2026 07:25:06.284 * <search> Successfully created index test:idx
+9:M 03 Oct 2026 07:25:06.284 * <search> Scanning index test:idx in background
+9:M 03 Oct 2026 07:25:06.285 * <search> Scanning index test:idx in background: done (scanned=9)
+9:M 03 Oct 2026 07:26:53.442 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 541224B
+9:M 03 Oct 2026 07:26:53.443 * <search> Successfully created index articles:idx
+9:M 03 Oct 2026 07:26:53.443 * <search> Scanning index articles:idx in background
+9:M 03 Oct 2026 07:26:53.481 * <search> DocTable capacity increase from 1000 to 1501
+9:M 03 Oct 2026 07:26:53.481 * <search> Scanning index articles:idx in background: done (scanned=1009)
+9:M 03 Oct 2026 07:26:53.484 * 100 changes in 300 seconds. Saving...
+9:M 03 Oct 2026 07:26:53.485 * Background saving started by pid 271
+271:C 03 Oct 2026 07:26:53.490 * BGSAVE done, 1009 keys saved, 0 keys skipped, 607550 bytes written.
+271:C 03 Oct 2026 07:26:53.492 * DB saved on disk
+271:C 03 Oct 2026 07:26:53.494 * Fork CoW for RDB: current 1 MB, peak 1 MB, average 1 MB
+9:M 03 Oct 2026 07:26:53.585 * Background saving terminated with success
+9:M 03 Oct 2026 07:27:47.905 * <search> Successfully dropped index test:idx
+9:M 03 Oct 2026 07:29:30.522 * BGSAVE done, 1000 keys saved, 0 keys skipped, 604539 bytes written.
+9:M 03 Oct 2026 07:29:30.524 * DB saved on disk
+9:M 03 Oct 2026 07:30:12.429 * <search> DocTable capacity increase from 1501 to 2252
+453:C 03 Oct 2026 07:30:15.477 * Fork CoW for Module fork: current 0 MB, peak 0 MB, average 0 MB
+9:M 03 Oct 2026 07:30:15.485 * Module fork exited pid: 453, retcode: 0, bysignal: 0
+9:M 03 Oct 2026 07:30:21.366 * <search> DocTable capacity increase from 2252 to 3379
+9:M 03 Oct 2026 07:30:21.412 * BGSAVE done, 1000 keys saved, 0 keys skipped, 604539 bytes written.
+9:M 03 Oct 2026 07:30:21.414 * DB saved on disk
+508:C 03 Oct 2026 07:30:47.538 * Fork CoW for Module fork: current 0 MB, peak 0 MB, average 0 MB
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

@@ -1,0 +1,122 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the Valkey-hosted article embeddings.
+
+Usage:  python3 /app/search.py < query.json
+
+Reads one query embedding (JSON list of 64 floats) from stdin and prints the
+ids of the 5 most similar articles (cosine similarity), most similar first.
+The similarity search itself is executed inside Valkey via an exact KNN query
+(FT.SEARCH, FLAT index, COSINE distance) -- no local computation of
+similarities and no access to the source data file.
+"""
+import json
+import struct
+import sys
+
+import redis
+
+INDEX = "articles_idx"
+TOP_K = 5
+
+
+def main() -> None:
+    embedding = json.load(sys.stdin)
+    if len(embedding) != 64:
+        raise SystemExit(f"expected 64 floats, got {len(embedding)}")
+    vec = struct.pack("<64f", *embedding)
+
+    r = redis.Redis(host="127.0.0.1", port=6379, decode_responses=False)
+
+    # Exact k-nearest-neighbour search run server-side inside Valkey.
+    # COSINE distance = 1 - cosine similarity, returned ascending,
+    # which is exactly cosine similarity descending.
+    query = f"*=>[KNN {TOP_K} @embedding $vec]"
+    res = r.execute_command(
+        "FT.SEARCH", INDEX, query,
+        "PARAMS", "2", "vec", vec,
+        "RETURN", "1", "id",
+        "DIALECT", "2",
+        "LIMIT", "0", str(TOP_K),
+        "NOCONTENT",
+    )
+
+    # reply: [total_count, key1, key2, ...] with NOCONTENT
+    keys = res[1:]
+    for key in keys:
+        # keys look like "article:kb-0123"; prefer the indexed `id` field
+        art_id = r.hget(key, "id")
+        print(art_id.decode() if art_id else key.decode().split(":", 1)[-1])
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:33 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:33 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1344 Oct  3 05:33 load.py
+-rwxr-xr-x 1 root root 1623 Oct  3 05:33 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+articles_idx
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    243 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: worker_pool_suspend_cnt Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: writer_queue_size Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: writer_resumed_cnt Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: writer_suspension_expired_cnt Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_deletes Flags:2
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_queries Flags:2
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_periods Flags:2
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_time Flags:2
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_upserts Flags:2
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_periods Flags:2
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_time Flags:2
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: cancel-timeouts Flags:6
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_deferred_entry_cnt Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [warning], tid: 128359227881280, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+9:M 03 Oct 2026 05:33:23.250 # <search> [notice], tid: 128359227881280, /vmsdk/src/module.cc:148: search module was successfully loaded!
+9:M 03 Oct 2026 05:33:23.250 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+9:M 03 Oct 2026 05:33:23.251 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+9:M 03 Oct 2026 05:33:23.251 * <bf> Created new data type 'bloomfltr'
+9:M 03 Oct 2026 05:33:23.251 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+9:M 03 Oct 2026 05:33:23.251 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+9:M 03 Oct 2026 05:33:23.252 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+9:M 03 Oct 2026 05:33:23.253 * Static Module 'lua' successfully loaded
+9:M 03 Oct 2026 05:33:23.253 * Server initialized
+9:M 03 Oct 2026 05:33:23.253 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:33:48.696 # <search> [notice], tid: 128359227881280, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 0)
+9:M 03 Oct 2026 05:33:48.732 # <search> [notice], tid: 128359227881280, /src/index_schema.cc:974: Index schema *redacted* finished backfill. Scanned 410 keys in 36.396081ms
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

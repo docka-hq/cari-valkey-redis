@@ -1,0 +1,124 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the knowledge-base articles stored in Valkey.
+
+Usage:  python3 /app/search.py < query.json
+
+query.json contains a single query embedding: a JSON list of 64 floats.
+The script prints the ids of the 5 most similar articles, one per line,
+most similar first.
+
+The similarity search itself runs entirely inside Valkey (the valkey-search
+module's FT.SEARCH KNN query over a cosine-distance vector index); this script
+only encodes the query vector and forwards it.
+"""
+import json
+import struct
+import sys
+
+import redis
+
+INDEX = "articles_idx"
+VECTOR_FIELD = "embedding"
+DIM = 64
+K = 5
+
+
+def main() -> None:
+    query = json.load(sys.stdin)
+    if len(query) != DIM:
+        raise SystemExit(f"expected a {DIM}-dimension query vector, got {len(query)}")
+
+    # FLOAT32 little-endian blob, matching the index's declared type.
+    blob = struct.pack(f"<{DIM}f", *(float(x) for x in query))
+
+    client = redis.Redis(host="127.0.0.1", port=6379)
+
+    # Vector results are returned in ascending distance order by default.
+    result = client.execute_command(
+        "FT.SEARCH", INDEX,
+        f"*=>[KNN {K} @{VECTOR_FIELD} $vec AS score]",
+        "PARAMS", "2", "vec", blob,
+        "RETURN", "1", "id",
+        "DIALECT", "2",
+        "LIMIT", "0", str(K),
+    )
+
+    # Response shape: [total, key1, [field, value, ...], key2, [...], ...]
+    for i in range(1, len(result), 2):
+        fields = result[i + 1]
+        fields = dict(zip(fields[::2], fields[1::2]))
+        print(fields[b"id"].decode())
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:52 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:51 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1778 Oct  3 05:52 load.py
+-rw-r--r-- 1 root root 1582 Oct  3 05:52 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+articles_idx
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    482 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 05:51:18.018 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+9:M 03 Oct 2026 05:51:18.018 * Static Module 'lua' successfully loaded
+9:M 03 Oct 2026 05:51:18.018 * Server initialized
+9:M 03 Oct 2026 05:51:18.018 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:51:28.766 # <search> [notice], tid: 125445728638784, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 0)
+9:M 03 Oct 2026 05:51:28.862 # <search> [notice], tid: 125445728638784, /src/index_schema.cc:974: Index schema *redacted* finished backfill. Scanned 0 keys in 96.179487ms
+9:M 03 Oct 2026 05:51:33.042 # <search> [notice], tid: 125445483767488, /src/index_schema.cc:334: Index schema *redacted* dropped from DB 0
+9:M 03 Oct 2026 05:52:00.393 # <search> [notice], tid: 125445728638784, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 0)
+9:M 03 Oct 2026 05:52:00.415 # <search> [notice], tid: 125445728638784, /src/index_schema.cc:974: Index schema *redacted* finished backfill. Scanned 132 keys in 22.087682ms
+9:M 03 Oct 2026 05:52:30.495 # <search> [notice], tid: 125445483767488, /src/index_schema.cc:334: Index schema *redacted* dropped from DB 0
+9:M 03 Oct 2026 05:52:30.495 # <search> [notice], tid: 125445728638784, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 1000)
+9:M 03 Oct 2026 05:52:30.523 # <search> [notice], tid: 125445728638784, /src/index_schema.cc:974: Index schema *redacted* finished backfill. Scanned 1000 keys in 27.834118ms
+9:M 03 Oct 2026 05:52:55.962 # <module> [warning], tid: 125445728638784, /src/valkey_search.cc:1030: At prepare fork callback, suspend writer worker thread pool returned message: 
+9:M 03 Oct 2026 05:52:55.962 # <module> [warning], tid: 125445728638784, /src/valkey_search.cc:1034: At prepare fork callback, suspend reader worker thread pool returned message: 
+9:M 03 Oct 2026 05:52:55.962 # <module> [warning], tid: 125445728638784, /src/valkey_search.cc:1038: At prepare fork callback, suspend utility worker thread pool returned message: 
+9:M 03 Oct 2026 05:52:55.962 # <module> [warning], tid: 125445728638784, /src/valkey_search.cc:1042: At prepare fork callback, suspend gRPC returned message: 
+9:M 03 Oct 2026 05:52:55.964 # <module> [warning], tid: 125445728638784, /src/valkey_search.cc:1055: After fork parent callback, resume reader worker thread pool returned message: 
+9:M 03 Oct 2026 05:52:55.964 # <module> [warning], tid: 125445728638784, /src/valkey_search.cc:1059: After fork parent callback, resume utility worker thread pool returned message: 
+9:M 03 Oct 2026 05:52:55.964 # <module> [warning], tid: 125445728638784, /src/valkey_search.cc:1064: After fork parent callback, resume gRPC returned message: 
+9:M 03 Oct 2026 05:52:55.964 * Background saving started by pid 402
+402:C 03 Oct 2026 05:52:55.970 # <search> [notice], tid: 125445728638784, /src/rdb_serialization.cc:260: Saving 1 ValkeySearch RDB sections with minimum version 1.2.0
+402:C 03 Oct 2026 05:52:55.970 * <search> Saving aux metadata for SchemaManager to aux RDB
+402:C 03 Oct 2026 05:52:55.970 # <module> [notice], tid: 125445728638784, /src/index_schema.cc:1240: Starting RDB save for index schema: *redacted* Saving in version 2 format
+402:C 03 Oct 2026 05:52:55.970 # <module> [notice], tid: 125445728638784, /src/index_schema.cc:1268: Starting to save 3 attributes.
+402:C 03 Oct 2026 05:52:55.973 # <module> [notice], tid: 125445728638784, /src/index_schema.cc:1410: Writing Index Extension, keys = 1000
+402:C 03 Oct 2026 05:52:55.974 # <module> [notice], tid: 125445728638784, /src/index_schema.cc:1428: Writing mutation queue records = 0 Total queue:0
+402:C 03 Oct 2026 05:52:55.976 * DB saved on disk
+402:C 03 Oct 2026 05:52:55.978 * Fork CoW for RDB: current 2 MB, peak 2 MB, average 1 MB
+9:M 03 Oct 2026 05:52:56.008 * Background saving terminated with success
+9:M 03 Oct 2026 05:52:56.008 # <search> [warning], tid: 125445728638784, /src/valkey_search.cc:1222: Fork child died notification received. Resuming writer worker thread pool returned message:  Suspend duration: 43.554723ms
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

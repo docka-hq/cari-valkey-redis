@@ -1,0 +1,145 @@
+[
+ {
+  "in": 657,
+  "out": 157,
+  "reasoning": 0,
+  "cached": 0,
+  "cost": 0.00010734,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1220,
+  "out": 199,
+  "reasoning": 10,
+  "cached": 512,
+  "cost": 0.00013868,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2237,
+  "out": 158,
+  "reasoning": 20,
+  "cached": 768,
+  "cost": 0.00013186,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3819,
+  "out": 107,
+  "reasoning": 18,
+  "cached": 1792,
+  "cost": 0.00012266,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5065,
+  "out": 1382,
+  "reasoning": 1185,
+  "cached": 3328,
+  "cost": 0.00089722,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6256,
+  "out": 2185,
+  "reasoning": 1959,
+  "cached": 4608,
+  "cost": 0.00139004,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7146,
+  "out": 1432,
+  "reasoning": 1204,
+  "cached": 5888,
+  "cost": 0.00094324,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7557,
+  "out": 264,
+  "reasoning": 55,
+  "cached": 6656,
+  "cost": 0.00024298,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8864,
+  "out": 131,
+  "reasoning": 8,
+  "cached": 7168,
+  "cost": 0.0001842,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9487,
+  "out": 416,
+  "reasoning": 114,
+  "cached": 8448,
+  "cost": 0.00035486,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9943,
+  "out": 1141,
+  "reasoning": 870,
+  "cached": 9216,
+  "cost": 0.0007913,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 10556,
+  "out": 350,
+  "reasoning": 57,
+  "cached": 9472,
+  "cost": 0.0003264,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11169,
+  "out": 590,
+  "reasoning": 92,
+  "cached": 10240,
+  "cost": 0.00047498,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Relace",
+  "stop": "stop"
+ }
+]

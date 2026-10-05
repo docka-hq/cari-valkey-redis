@@ -1,0 +1,211 @@
+[
+ {
+  "in": 529,
+  "out": 91,
+  "reasoning": 17,
+  "cached": 0,
+  "cost": 6.4015e-05,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 894,
+  "out": 186,
+  "reasoning": 42,
+  "cached": 0,
+  "cost": 0.00012429,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1268,
+  "out": 251,
+  "reasoning": 189,
+  "cached": 0,
+  "cost": 0.00016988,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1677,
+  "out": 57,
+  "reasoning": 0,
+  "cached": 0,
+  "cost": 8.7195e-05,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2776,
+  "out": 3190,
+  "reasoning": 2724,
+  "cached": 0,
+  "cost": 0.00169216,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3471,
+  "out": 390,
+  "reasoning": 108,
+  "cached": 0,
+  "cost": 0.000316485,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3852,
+  "out": 381,
+  "reasoning": 54,
+  "cached": 2752,
+  "cost": 0.00032532,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4385,
+  "out": 787,
+  "reasoning": 573,
+  "cached": 2752,
+  "cost": 0.000546975,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5063,
+  "out": 462,
+  "reasoning": 140,
+  "cached": 2752,
+  "cost": 0.000408205,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5528,
+  "out": 255,
+  "reasoning": 0,
+  "cached": 4352,
+  "cost": 0.00032098,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5965,
+  "out": 593,
+  "reasoning": 362,
+  "cached": 5632,
+  "cost": 0.000505275,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6416,
+  "out": 210,
+  "reasoning": 52,
+  "cached": 5632,
+  "cost": 0.00032956,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6762,
+  "out": 209,
+  "reasoning": 53,
+  "cached": 5632,
+  "cost": 0.00034117,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7060,
+  "out": 3061,
+  "reasoning": 2514,
+  "cached": 5632,
+  "cost": 0.0017776,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7848,
+  "out": 569,
+  "reasoning": 0,
+  "cached": 5632,
+  "cost": 0.00055918,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8541,
+  "out": 1368,
+  "reasoning": 1026,
+  "cached": 8192,
+  "cost": 0.000982935,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8820,
+  "out": 315,
+  "reasoning": 122,
+  "cached": 8192,
+  "cost": 0.0004662,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9748,
+  "out": 374,
+  "reasoning": 327,
+  "cached": 8192,
+  "cost": 0.00052818,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9831,
+  "out": 487,
+  "reasoning": 10,
+  "cached": 8768,
+  "cost": 0.000587585,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "stop"
+ }
+]

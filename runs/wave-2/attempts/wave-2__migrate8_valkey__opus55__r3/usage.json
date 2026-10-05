@@ -1,0 +1,212 @@
+[
+ {
+  "in": 4,
+  "cache_write": 0,
+  "cache_read": 878,
+  "out": 276,
+  "cost": 0.005711600000000001,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1186,
+  "cache_read": 878,
+  "out": 289,
+  "cost": 0.0118936,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 559,
+  "cache_read": 2064,
+  "out": 182,
+  "cost": 0.0068558000000000004,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 2398,
+  "cache_read": 2623,
+  "out": 1399,
+  "cost": 0.0405026,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1793,
+  "cache_read": 5021,
+  "out": 283,
+  "cost": 0.0156372,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 370,
+  "cache_read": 6814,
+  "out": 296,
+  "cost": 0.0091408,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 462,
+  "cache_read": 7184,
+  "out": 228,
+  "cost": 0.008314799999999999,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 248,
+  "cache_read": 7646,
+  "out": 414,
+  "cost": 0.011057200000000001,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1180,
+  "cache_read": 7894,
+  "out": 205,
+  "cost": 0.0115868,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1368,
+  "cache_read": 9074,
+  "out": 706,
+  "cost": 0.0227828,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 964,
+  "cache_read": 10442,
+  "out": 136,
+  "cost": 0.0096364,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 451,
+  "cache_read": 11406,
+  "out": 579,
+  "cost": 0.0161242,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 682,
+  "cache_read": 11857,
+  "out": 260,
+  "cost": 0.0109894,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 551,
+  "cache_read": 12539,
+  "out": 407,
+  "cost": 0.013410799999999999,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 2565,
+  "cache_read": 13090,
+  "out": 1791,
+  "cost": 0.051271,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 2396,
+  "cache_read": 15655,
+  "out": 1494,
+  "cost": 0.044999,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1557,
+  "cache_read": 18051,
+  "out": 578,
+  "cost": 0.0229632,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1323,
+  "cache_read": 19608,
+  "out": 336,
+  "cost": 0.017264599999999998,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 527,
+  "cache_read": 20931,
+  "out": 1046,
+  "cost": 0.0277492,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 1077,
+  "cache_read": 21458,
+  "out": 445,
+  "cost": 0.0185846,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2,
+  "cache_write": 529,
+  "cache_read": 22535,
+  "out": 790,
+  "cost": 0.02296,
+  "cost_source": "usage x list price",
+  "model": "claude-opus-5-5",
+  "stop": "end_turn"
+ }
+]

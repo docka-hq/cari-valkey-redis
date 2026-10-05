@@ -1,0 +1,140 @@
+$ valkey-cli -p 6380 INFO replication
+# Replication
+role:master
+connected_slaves:0
+replicas_waiting_psync:0
+master_failover_state:no-failover
+master_replid:9f0732d408f9a8803d5b97aba364379233ac4c3d
+master_replid2:07af3f6495a7fe3a6e042357ff6308370a008fdf
+master_repl_offset:0
+second_repl_offset:1
+repl_backlog_active:0
+repl_backlog_size:10485760
+repl_backlog_first_byte_offset:0
+repl_backlog_histlen:0
+
+
+$ valkey-cli -p 6380 INFO keyspace
+# Keyspace
+db0:keys=2960,expires=900,avg_ttl=37040323,keys_with_volatile_items=40
+db2:keys=350,expires=150,avg_ttl=41322577,keys_with_volatile_items=0
+
+
+$ /opt/redis-8.10/bin/redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=2960,expires=900,avg_ttl=36519712,subexpiry=40
+db2:keys=350,expires=150,avg_ttl=41295375,subexpiry=0
+
+
+$ cat /etc/valkey/valkey.conf
+# Valkey 9.1 - new server
+bind 127.0.0.1 -::1
+port 6380
+protected-mode yes
+daemonize yes
+pidfile /run/valkey/valkey.pid
+logfile /var/log/valkey/valkey.log
+dir /var/lib/valkey
+
+
+$ ls -la /var/lib/valkey /var/lib/redis-old
+/var/lib/redis-old:
+total 440
+drwxr-xr-x 2 root root   4096 Oct  3 07:31 .
+drwxr-xr-x 1 root root   4096 Oct  3 07:30 ..
+-rw-r--r-- 1 root root 438462 Oct  3 07:31 dump.rdb
+
+/var/lib/valkey:
+total 436
+drwxr-xr-x 2 root root   4096 Oct  3 08:08 .
+drwxr-xr-x 1 root root   4096 Oct  3 07:30 ..
+-rw-r--r-- 1 root root 438023 Oct  3 08:08 dump.rdb
+
+
+$ tail -n 40 /var/log/valkey/valkey.log
+16:S 03 Oct 2026 07:52:19.172 * PRIMARY <-> REPLICA sync: Loading DB in memory
+16:S 03 Oct 2026 07:52:19.172 * Cleaning slot migration log in anticipation of a load operation.
+16:S 03 Oct 2026 07:52:19.172 # Can't handle RDB format version 15
+16:S 03 Oct 2026 07:52:19.172 # Failed trying to load the PRIMARY synchronization DB from disk, check server logs.
+16:S 03 Oct 2026 07:52:19.172 * PRIMARY <-> REPLICA sync: Skipping flush, no new data was loaded.
+16:S 03 Oct 2026 07:52:19.172 # Failed to load RDB
+16:S 03 Oct 2026 07:52:19.172 * Reconnecting to PRIMARY 127.0.0.1:6379 after failure
+16:S 03 Oct 2026 07:52:19.172 * PRIMARY <-> REPLICA sync started
+16:S 03 Oct 2026 07:52:19.172 * Non blocking connect for SYNC fired the event.
+16:S 03 Oct 2026 07:52:19.172 * Primary replied to PING, replication can continue...
+16:S 03 Oct 2026 07:52:19.173 * (Non critical) Primary does not understand REPLCONF VERSION: -ERR Unrecognized REPLCONF option: version
+16:S 03 Oct 2026 07:52:19.173 * Partial resynchronization not possible (no cached primary)
+16:S 03 Oct 2026 07:52:24.149 * Full resync from primary: c19270599ba1be1d557b511a60ac1df6ce21d1eb:364
+16:S 03 Oct 2026 07:52:24.151 * Replica main thread creating Bio thread to save RDB to disk
+16:S 03 Oct 2026 07:52:24.151 * Replica bio thread: PRIMARY <-> REPLICA sync: receiving streamed RDB from primary with EOF to disk
+16:S 03 Oct 2026 07:52:24.154 * Replica bio thread: Done downloading RDB
+16:S 03 Oct 2026 07:52:24.192 * Replica main thread detected RDB download completion in Bio thread
+16:S 03 Oct 2026 07:52:24.192 * Loading the RDB and finalizing primary-replica sync...
+16:S 03 Oct 2026 07:52:24.193 * PRIMARY <-> REPLICA sync: Loading DB in memory
+16:S 03 Oct 2026 07:52:24.193 * Cleaning slot migration log in anticipation of a load operation.
+16:S 03 Oct 2026 07:52:24.193 # Can't handle RDB format version 15
+16:S 03 Oct 2026 07:52:24.193 # Failed trying to load the PRIMARY synchronization DB from disk, check server logs.
+16:S 03 Oct 2026 07:52:24.193 * PRIMARY <-> REPLICA sync: Skipping flush, no new data was loaded.
+16:S 03 Oct 2026 07:52:24.193 # Failed to load RDB
+16:S 03 Oct 2026 07:52:24.193 * Reconnecting to PRIMARY 127.0.0.1:6379 after failure
+16:S 03 Oct 2026 07:52:24.193 * PRIMARY <-> REPLICA sync started
+16:S 03 Oct 2026 07:52:24.193 * Non blocking connect for SYNC fired the event.
+16:S 03 Oct 2026 07:52:24.193 * Primary replied to PING, replication can continue...
+16:S 03 Oct 2026 07:52:24.194 * (Non critical) Primary does not understand REPLCONF VERSION: -ERR Unrecognized REPLCONF option: version
+16:S 03 Oct 2026 07:52:24.194 * Partial resynchronization not possible (no cached primary)
+16:M 03 Oct 2026 07:52:29.142 * Setting secondary replication ID to 07af3f6495a7fe3a6e042357ff6308370a008fdf, valid up to offset: 1. New replication ID is 9f0732d408f9a8803d5b97aba364379233ac4c3d
+16:M 03 Oct 2026 07:52:29.142 * PRIMARY MODE enabled (user request from 'id=169 addr=127.0.0.1:58954 laddr=127.0.0.1:6380 fd=11 name=*redacted* user=*redacted* lib-name= lib-ver=')
+16:M 03 Oct 2026 08:03:03.661 * DB saved on disk
+16:M 03 Oct 2026 08:05:06.508 * DB saved on disk
+16:M 03 Oct 2026 08:05:55.643 * DB saved on disk
+16:M 03 Oct 2026 08:06:31.095 * DB saved on disk
+16:M 03 Oct 2026 08:06:57.244 * DB saved on disk
+16:M 03 Oct 2026 08:07:46.935 * DB saved on disk
+16:M 03 Oct 2026 08:07:52.694 * DB saved on disk
+16:M 03 Oct 2026 08:08:12.173 * DB saved on disk
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     /opt/redis-8.10/bin/redis-server 127.0.0.1:6379
+     16 root     valkey-server 127.0.0.1:6380
+   7561 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+16:S 03 Oct 2026 07:52:19.173 * (Non critical) Primary does not understand REPLCONF VERSION: -ERR Unrecognized REPLCONF option: version
+16:S 03 Oct 2026 07:52:19.173 * Partial resynchronization not possible (no cached primary)
+16:S 03 Oct 2026 07:52:24.149 * Full resync from primary: c19270599ba1be1d557b511a60ac1df6ce21d1eb:364
+16:S 03 Oct 2026 07:52:24.151 * Replica main thread creating Bio thread to save RDB to disk
+16:S 03 Oct 2026 07:52:24.151 * Replica bio thread: PRIMARY <-> REPLICA sync: receiving streamed RDB from primary with EOF to disk
+16:S 03 Oct 2026 07:52:24.154 * Replica bio thread: Done downloading RDB
+16:S 03 Oct 2026 07:52:24.192 * Replica main thread detected RDB download completion in Bio thread
+16:S 03 Oct 2026 07:52:24.192 * Loading the RDB and finalizing primary-replica sync...
+16:S 03 Oct 2026 07:52:24.193 * PRIMARY <-> REPLICA sync: Loading DB in memory
+16:S 03 Oct 2026 07:52:24.193 * Cleaning slot migration log in anticipation of a load operation.
+16:S 03 Oct 2026 07:52:24.193 # Can't handle RDB format version 15
+16:S 03 Oct 2026 07:52:24.193 # Failed trying to load the PRIMARY synchronization DB from disk, check server logs.
+16:S 03 Oct 2026 07:52:24.193 * PRIMARY <-> REPLICA sync: Skipping flush, no new data was loaded.
+16:S 03 Oct 2026 07:52:24.193 # Failed to load RDB
+16:S 03 Oct 2026 07:52:24.193 * Reconnecting to PRIMARY 127.0.0.1:6379 after failure
+16:S 03 Oct 2026 07:52:24.193 * PRIMARY <-> REPLICA sync started
+16:S 03 Oct 2026 07:52:24.193 * Non blocking connect for SYNC fired the event.
+16:S 03 Oct 2026 07:52:24.193 * Primary replied to PING, replication can continue...
+16:S 03 Oct 2026 07:52:24.194 * (Non critical) Primary does not understand REPLCONF VERSION: -ERR Unrecognized REPLCONF option: version
+16:S 03 Oct 2026 07:52:24.194 * Partial resynchronization not possible (no cached primary)
+16:M 03 Oct 2026 07:52:29.142 * Setting secondary replication ID to 07af3f6495a7fe3a6e042357ff6308370a008fdf, valid up to offset: 1. New replication ID is 9f0732d408f9a8803d5b97aba364379233ac4c3d
+16:M 03 Oct 2026 07:52:29.142 * PRIMARY MODE enabled (user request from 'id=169 addr=127.0.0.1:58954 laddr=127.0.0.1:6380 fd=11 name=*redacted* user=*redacted* lib-name= lib-ver=')
+16:M 03 Oct 2026 08:03:03.661 * DB saved on disk
+16:M 03 Oct 2026 08:05:06.508 * DB saved on disk
+16:M 03 Oct 2026 08:05:55.643 * DB saved on disk
+16:M 03 Oct 2026 08:06:31.095 * DB saved on disk
+16:M 03 Oct 2026 08:06:57.244 * DB saved on disk
+16:M 03 Oct 2026 08:07:46.935 * DB saved on disk
+16:M 03 Oct 2026 08:07:52.694 * DB saved on disk
+16:M 03 Oct 2026 08:08:12.173 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+redis     8.1.0
+valkey    6.1.1

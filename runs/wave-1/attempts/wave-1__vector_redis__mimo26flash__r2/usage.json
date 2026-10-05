@@ -1,0 +1,101 @@
+[
+ {
+  "in": 479,
+  "out": 131,
+  "reasoning": 19,
+  "cached": 224,
+  "cost": 7.0816984e-05,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1497,
+  "out": 312,
+  "reasoning": 202,
+  "cached": 416,
+  "cost": 0.000232668856,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1663,
+  "out": 611,
+  "reasoning": 246,
+  "cached": 224,
+  "cost": 0.000361972184,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2118,
+  "out": 300,
+  "reasoning": 76,
+  "cached": 1440,
+  "cost": 0.00017746344,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2758,
+  "out": 840,
+  "reasoning": 93,
+  "cached": 2080,
+  "cost": 0.00032586568,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3667,
+  "out": 360,
+  "reasoning": 188,
+  "cached": 2720,
+  "cost": 0.00023376612,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3888,
+  "out": 803,
+  "reasoning": 313,
+  "cached": 3616,
+  "cost": 0.000264853456,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4529,
+  "out": 339,
+  "reasoning": 93,
+  "cached": 1600,
+  "cost": 0.0004941762,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4896,
+  "out": 481,
+  "reasoning": 32,
+  "cached": 4480,
+  "cost": 0.00019930008,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "stop"
+ }
+]

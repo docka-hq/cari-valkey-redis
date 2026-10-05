@@ -1,0 +1,118 @@
+$ valkey-cli -p 6380 INFO replication
+# Replication
+role:master
+connected_slaves:0
+replicas_waiting_psync:0
+master_failover_state:no-failover
+master_replid:1280077ed4a01f810df5dd324c3e329d30be5a42
+master_replid2:0000000000000000000000000000000000000000
+master_repl_offset:0
+second_repl_offset:-1
+repl_backlog_active:0
+repl_backlog_size:10485760
+repl_backlog_first_byte_offset:0
+repl_backlog_histlen:0
+
+
+$ valkey-cli -p 6380 INFO keyspace
+# Keyspace
+db0:keys=2960,expires=900,avg_ttl=38643210,keys_with_volatile_items=40
+db2:keys=350,expires=150,avg_ttl=43194205,keys_with_volatile_items=0
+
+
+$ /opt/redis-8.10/bin/redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=2960,expires=900,avg_ttl=39008463,subexpiry=40
+db2:keys=350,expires=150,avg_ttl=42581509,subexpiry=0
+
+
+$ cat /etc/valkey/valkey.conf
+# Valkey 9.1 - new server
+bind 127.0.0.1 -::1
+port 6380
+protected-mode yes
+daemonize yes
+pidfile /run/valkey/valkey.pid
+logfile /var/log/valkey/valkey.log
+dir /var/lib/valkey
+
+
+$ ls -la /var/lib/valkey /var/lib/redis-old
+/var/lib/redis-old:
+total 440
+drwxr-xr-x 2 root root   4096 Oct  3 06:45 .
+drwxr-xr-x 1 root root   4096 Oct  3 06:43 ..
+-rw-r--r-- 1 root root 438462 Oct  3 06:45 dump.rdb
+
+/var/lib/valkey:
+total 436
+drwxr-xr-x 2 root root   4096 Oct  3 06:49 .
+drwxr-xr-x 1 root root   4096 Oct  3 06:43 ..
+-rw-r--r-- 1 root root 438103 Oct  3 06:49 dump.rdb
+
+
+$ tail -n 40 /var/log/valkey/valkey.log
+10:M 03 Oct 2026 06:43:21.568 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+16:M 03 Oct 2026 06:43:21.569 * oO0OoO0OoO0Oo Valkey is starting oO0OoO0OoO0Oo
+16:M 03 Oct 2026 06:43:21.569 * Valkey version=9.1.2, bits=64, commit=00000000, modified=0, pid=16, just started
+16:M 03 Oct 2026 06:43:21.569 * Configuration loaded
+16:M 03 Oct 2026 06:43:21.569 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+16:M 03 Oct 2026 06:43:21.599 * monotonic clock: POSIX clock_gettime
+16:M 03 Oct 2026 06:43:21.600 * Running mode=standalone, port=6380.
+16:M 03 Oct 2026 06:43:21.601 * Static Module 'lua' successfully loaded
+16:M 03 Oct 2026 06:43:21.601 * Server initialized
+16:M 03 Oct 2026 06:43:21.601 * Ready to accept connections tcp
+16:M 03 Oct 2026 06:45:24.697 * Background saving started by pid 15740
+15740:C 03 Oct 2026 06:45:24.699 * DB saved on disk
+15740:C 03 Oct 2026 06:45:24.700 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+16:M 03 Oct 2026 06:45:24.798 * Background saving terminated with success
+16:M 03 Oct 2026 06:48:06.613 * DB saved on disk
+16:M 03 Oct 2026 06:48:17.368 * DB saved on disk
+16:M 03 Oct 2026 06:48:31.474 * DB saved on disk
+16:M 03 Oct 2026 06:48:44.085 * DB saved on disk
+16:M 03 Oct 2026 06:49:45.063 * 10000 changes in 60 seconds. Saving...
+16:M 03 Oct 2026 06:49:45.064 * Background saving started by pid 16080
+16080:C 03 Oct 2026 06:49:45.073 * DB saved on disk
+16080:C 03 Oct 2026 06:49:45.074 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+16:M 03 Oct 2026 06:49:45.164 * Background saving terminated with success
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     /opt/redis-8.10/bin/redis-server 127.0.0.1:6379
+     16 root     valkey-server 127.0.0.1:6380
+  15779 root     [valkey-server] <defunct>
+  15799 root     [valkey-server] <defunct>
+  16172 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+10:M 03 Oct 2026 06:43:21.568 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+16:M 03 Oct 2026 06:43:21.569 * oO0OoO0OoO0Oo Valkey is starting oO0OoO0OoO0Oo
+16:M 03 Oct 2026 06:43:21.569 * Valkey version=9.1.2, bits=64, commit=00000000, modified=0, pid=16, just started
+16:M 03 Oct 2026 06:43:21.569 * Configuration loaded
+16:M 03 Oct 2026 06:43:21.569 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+16:M 03 Oct 2026 06:43:21.599 * monotonic clock: POSIX clock_gettime
+16:M 03 Oct 2026 06:43:21.600 * Running mode=standalone, port=6380.
+16:M 03 Oct 2026 06:43:21.601 * Static Module 'lua' successfully loaded
+16:M 03 Oct 2026 06:43:21.601 * Server initialized
+16:M 03 Oct 2026 06:43:21.601 * Ready to accept connections tcp
+16:M 03 Oct 2026 06:45:24.697 * Background saving started by pid 15740
+15740:C 03 Oct 2026 06:45:24.699 * DB saved on disk
+15740:C 03 Oct 2026 06:45:24.700 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+16:M 03 Oct 2026 06:45:24.798 * Background saving terminated with success
+16:M 03 Oct 2026 06:48:06.613 * DB saved on disk
+16:M 03 Oct 2026 06:48:17.368 * DB saved on disk
+16:M 03 Oct 2026 06:48:31.474 * DB saved on disk
+16:M 03 Oct 2026 06:48:44.085 * DB saved on disk
+16:M 03 Oct 2026 06:49:45.063 * 10000 changes in 60 seconds. Saving...
+16:M 03 Oct 2026 06:49:45.064 * Background saving started by pid 16080
+16080:C 03 Oct 2026 06:49:45.073 * DB saved on disk
+16080:C 03 Oct 2026 06:49:45.074 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+16:M 03 Oct 2026 06:49:45.164 * Background saving terminated with success
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+redis     8.1.0
+valkey    6.1.1

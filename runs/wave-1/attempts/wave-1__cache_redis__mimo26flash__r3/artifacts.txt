@@ -1,0 +1,203 @@
+$ cat /app/catalog.py
+"""Product catalog used by the storefront.
+
+get_product(product_id) -> dict    {"id": int, "name": str, "price": float, "currency": str}
+update_price(product_id, price)    changes the price in the inventory service
+
+Reads are cached in the shared Redis server (127.0.0.1:6379) so that every
+storefront process reuses the same copy of a product instead of hitting the
+slow inventory service.  Entries expire after 5 minutes, and update_price()
+invalidates the shared entry so the next read (in any process) sees the new
+price.
+"""
+import json
+import urllib.request
+
+import redis
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+
+CACHE_TTL_SECONDS = 300  # cached products expire after 5 minutes
+
+REDIS_HOST = "127.0.0.1"
+REDIS_PORT = 6379
+
+# Shared by every process that imports this module; the client is lazy and
+# thread-safe (one connection pool per process).
+_redis = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+
+def _cache_key(product_id: int) -> str:
+    return f"storefront:product:{int(product_id)}"
+
+
+def _generation_key(product_id: int) -> str:
+    return f"storefront:product:{int(product_id)}:generation"
+
+
+# Store the freshly fetched product only if no update_price() happened while
+# the upstream read was in flight; otherwise a slow GET could overwrite the
+# new price with stale data for the next 5 minutes.
+_STORE_IF_GENERATION_UNCHANGED = """
+local gen = redis.call("GET", KEYS[2])
+if not gen then gen = "0" end
+if gen == ARGV[1] then
+    redis.call("SETEX", KEYS[1], ARGV[2], ARGV[3])
+end
+"""
+
+# Invalidate first, then publish the new price: readers that miss the cache
+# after this point fetch from the inventory service, which already has the
+# new value; readers that hit the cache get the value written here.
+_UPDATE_CACHE = """
+redis.call("INCR", KEYS[2])
+if ARGV[2] ~= "" then
+    redis.call("SETEX", KEYS[1], ARGV[1], ARGV[2])
+else
+    redis.call("DEL", KEYS[1])
+end
+"""
+
+
+def _get_cached(product_id: int):
+    """Return the cached product dict, or None on a miss / Redis failure."""
+    try:
+        cached = _redis.get(_cache_key(product_id))
+    except redis.RedisError:
+        return None
+    if not cached:
+        return None
+    try:
+        product = json.loads(cached)
+    except ValueError:
+        return None
+    return product if isinstance(product, dict) else None
+
+
+def _store_cached(product_id: int, generation: str, product: dict) -> None:
+    try:
+        _redis.eval(
+            _STORE_IF_GENERATION_UNCHANGED,
+            2,
+            _cache_key(product_id),
+            _generation_key(product_id),
+            generation,
+            str(CACHE_TTL_SECONDS),
+            json.dumps(product),
+        )
+    except redis.RedisError:
+        pass  # caching is best effort; the fetched value is still returned
+
+
+def _publish_cached(product_id: int, product) -> None:
+    try:
+        _redis.eval(
+            _UPDATE_CACHE,
+            2,
+            _cache_key(product_id),
+            _generation_key(product_id),
+            str(CACHE_TTL_SECONDS),
+            json.dumps(product) if product is not None else "",
+        )
+    except redis.RedisError:
+        pass
+
+
+def get_product(product_id: int) -> dict:
+    product_id = int(product_id)
+
+    cached = _get_cached(product_id)
+    if cached is not None:
+        return cached
+
+    # Read the generation before talking to the inventory service so that a
+    # concurrent update_price() invalidates whatever we fetch here.
+    try:
+        generation = _redis.get(_generation_key(product_id)) or "0"
+    except redis.RedisError:
+        generation = "0"
+
+    with urllib.request.urlopen(f"{INVENTORY_URL}/products/{product_id}", timeout=10) as resp:
+        product = json.load(resp)
+
+    _store_cached(product_id, generation, product)
+    return product
+
+
+def update_price(product_id: int, price: float) -> None:
+    product_id = int(product_id)
+    body = json.dumps({"price": price}).encode()
+    req = urllib.request.Request(
+        f"{INVENTORY_URL}/products/{product_id}",
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        raw = resp.read()
+
+    # The PUT response is the updated product: publish it to the shared cache
+    # and bump the generation so no stale in-flight read can re-cache the old
+    # price.  Every process sees the new price on its next get_product().
+    try:
+        updated = json.loads(raw)
+    except ValueError:
+        updated = None
+    if not isinstance(updated, dict):
+        updated = None
+    _publish_cached(product_id, updated)
+
+
+$ ls -la /app
+total 24
+drwxr-xr-x 1 root root 4096 Oct  3 05:51 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:49 ..
+drwxr-xr-x 2 root root 4096 Oct  3 05:52 __pycache__
+-rw-r--r-- 1 root root 4607 Oct  3 05:51 catalog.py
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     redis-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    455 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+9:M 03 Oct 2026 05:49:35.059 * <bf> 	{ cf-initial-size     :      1024 }
+9:M 03 Oct 2026 05:49:35.059 * <bf> 	{ cf-max-iterations   :        20 }
+9:M 03 Oct 2026 05:49:35.060 * <bf> 	{ cf-expansion-factor :         1 }
+9:M 03 Oct 2026 05:49:35.060 * <bf> 	{ cf-max-expansions   :        32 }
+9:M 03 Oct 2026 05:49:35.060 * <bf> ]
+9:M 03 Oct 2026 05:49:35.060 * Module 'bf' loaded from /usr/local/lib/redis/modules/redisbloom.so
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> RedisTimeSeries version 81001, git_sha=
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> Registering configuration options: [
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-compaction-policy   :              }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-num-threads         :            3 }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-retention-policy    :            0 }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-duplicate-policy    :        block }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-encoding            :   compressed }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> 	{ ts-topology-events     :         true }
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> ]
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> Detected redis oss (cluster-enabled=no)
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> Subscribe to ASM events
+9:M 03 Oct 2026 05:49:35.060 * <timeseries> Subscribe to topology changes events
+9:M 03 Oct 2026 05:49:35.061 * <timeseries> Enabled diskless replication
+9:M 03 Oct 2026 05:49:35.061 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+9:M 03 Oct 2026 05:49:35.061 * Server initialized
+9:M 03 Oct 2026 05:49:35.061 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:49:35.061 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+9:M 03 Oct 2026 05:52:09.129 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:52:09.130 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

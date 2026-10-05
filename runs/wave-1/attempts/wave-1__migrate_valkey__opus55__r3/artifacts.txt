@@ -1,0 +1,97 @@
+$ valkey-cli -p 6380 INFO replication
+# Replication
+role:master
+connected_slaves:0
+replicas_waiting_psync:0
+master_failover_state:no-failover
+master_replid:91e569ea5a7caa77cb20328294a0d8e3a80bec79
+master_replid2:80d44a147785af2c5b50a719a1521a8054a90ff7
+master_repl_offset:223
+second_repl_offset:29
+repl_backlog_active:1
+repl_backlog_size:10485760
+repl_backlog_first_byte_offset:15
+repl_backlog_histlen:209
+
+
+$ valkey-cli -p 6380 INFO keyspace
+# Keyspace
+db0:keys=2920,expires=900,avg_ttl=39218220,keys_with_volatile_items=0
+db2:keys=350,expires=150,avg_ttl=43428359,keys_with_volatile_items=0
+
+
+$ /opt/redis-7.2/bin/redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=2920,expires=900,avg_ttl=38989115
+db2:keys=350,expires=150,avg_ttl=43131802
+
+
+$ cat /etc/valkey/valkey.conf
+# Valkey 9.1 - new server
+bind 127.0.0.1 -::1
+port 6380
+protected-mode yes
+daemonize yes
+pidfile /run/valkey/valkey.pid
+logfile /var/log/valkey/valkey.log
+dir /var/lib/valkey
+
+
+$ ls -la /var/lib/valkey /var/lib/redis-old
+/var/lib/redis-old:
+total 432
+drwxr-xr-x 2 root root   4096 Oct  3 05:30 .
+drwxr-xr-x 1 root root   4096 Oct  3 05:29 ..
+-rw-r--r-- 1 root root 432350 Oct  3 05:30 dump.rdb
+
+/var/lib/valkey:
+total 432
+drwxr-xr-x 2 root root   4096 Oct  3 05:29 .
+drwxr-xr-x 1 root root   4096 Oct  3 05:29 ..
+-rw-r--r-- 1 root root 432350 Oct  3 05:29 dump.rdb
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     /opt/redis-7.2/bin/redis-server 127.0.0.1:6379
+     15 root     valkey-server 127.0.0.1:6380
+    222 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+15:M 03 Oct 2026 05:29:34.537 * Server initialized
+15:M 03 Oct 2026 05:29:34.537 * Ready to accept connections tcp
+15:S 03 Oct 2026 05:29:50.527 * Before turning into a replica, using my own primary parameters to synthesize a cached primary: I may be able to synchronize with the new primary with just a partial transfer.
+15:S 03 Oct 2026 05:29:50.527 * Connecting to PRIMARY 127.0.0.1:6379
+15:S 03 Oct 2026 05:29:50.528 * PRIMARY <-> REPLICA sync started
+15:S 03 Oct 2026 05:29:50.528 * REPLICAOF 127.0.0.1:6379 enabled (user request from 'id=8 addr=127.0.0.1:59918 laddr=127.0.0.1:6380 fd=10 name=*redacted* user=*redacted* lib-name= lib-ver=')
+15:S 03 Oct 2026 05:29:50.528 * Non blocking connect for SYNC fired the event.
+15:S 03 Oct 2026 05:29:50.528 * Primary replied to PING, replication can continue...
+15:S 03 Oct 2026 05:29:50.528 * (Non critical) Primary does not understand REPLCONF VERSION: -ERR Unrecognized REPLCONF option: version
+15:S 03 Oct 2026 05:29:50.528 * Trying a partial resynchronization (request 564ba9617d6cfe5f706707716023345dcf1147ec:1).
+15:S 03 Oct 2026 05:29:55.557 * Full resync from primary: 80d44a147785af2c5b50a719a1521a8054a90ff7:14
+15:S 03 Oct 2026 05:29:55.559 * Replica main thread creating Bio thread to save RDB to disk
+15:S 03 Oct 2026 05:29:55.559 * Replica bio thread: PRIMARY <-> REPLICA sync: receiving streamed RDB from primary with EOF to disk
+15:S 03 Oct 2026 05:29:55.562 * Replica bio thread: Done downloading RDB
+15:S 03 Oct 2026 05:29:55.593 * Replica main thread detected RDB download completion in Bio thread
+15:S 03 Oct 2026 05:29:55.593 * Loading the RDB and finalizing primary-replica sync...
+15:S 03 Oct 2026 05:29:55.595 * Discarding previously cached primary state.
+15:S 03 Oct 2026 05:29:55.595 * PRIMARY <-> REPLICA sync: Loading DB in memory
+15:S 03 Oct 2026 05:29:55.595 * Cleaning slot migration log in anticipation of a load operation.
+15:S 03 Oct 2026 05:29:55.595 * RDB signature and version check passed. Flushing old data
+15:S 03 Oct 2026 05:29:55.595 * Loading RDB produced by Redis version 7.2.16
+15:S 03 Oct 2026 05:29:55.595 * RDB age 0 seconds
+15:S 03 Oct 2026 05:29:55.595 * RDB memory usage when created 2.43 Mb
+15:S 03 Oct 2026 05:29:55.599 * Done loading RDB, keys loaded: 3270, keys expired: 0, all fields expired hashes: 0.
+15:S 03 Oct 2026 05:29:55.599 * PRIMARY <-> REPLICA sync: Finished with success
+15:M 03 Oct 2026 05:30:10.153 * Connection with primary lost.
+15:M 03 Oct 2026 05:30:10.153 * Caching the disconnected primary state.
+15:M 03 Oct 2026 05:30:10.153 * Discarding previously cached primary state.
+15:M 03 Oct 2026 05:30:10.153 * Setting secondary replication ID to 80d44a147785af2c5b50a719a1521a8054a90ff7, valid up to offset: 29. New replication ID is 91e569ea5a7caa77cb20328294a0d8e3a80bec79
+15:M 03 Oct 2026 05:30:10.153 * PRIMARY MODE enabled (user request from 'id=15 addr=127.0.0.1:38564 laddr=127.0.0.1:6380 fd=10 name=*redacted* user=*redacted* lib-name= lib-ver=')
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+redis     8.1.0
+valkey    6.1.1

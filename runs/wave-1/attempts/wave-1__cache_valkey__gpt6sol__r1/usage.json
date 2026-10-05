@@ -1,0 +1,68 @@
+[
+ {
+  "in": 391,
+  "out": 108,
+  "reasoning": 0,
+  "cached": 0,
+  "cost": 0.001862,
+  "cost_source": "openrouter metered",
+  "model": "openai/gpt-6-sol",
+  "provider": "OpenAI",
+  "stop": "tool_use"
+ },
+ {
+  "in": 841,
+  "out": 134,
+  "reasoning": 32,
+  "cached": 0,
+  "cost": 0.003022,
+  "cost_source": "openrouter metered",
+  "model": "openai/gpt-6-sol",
+  "provider": "OpenAI",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1724,
+  "out": 85,
+  "reasoning": 15,
+  "cached": 0,
+  "cost": 0.0051585,
+  "cost_source": "openrouter metered",
+  "model": "openai/gpt-6-sol",
+  "provider": "OpenAI",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1980,
+  "out": 693,
+  "reasoning": 629,
+  "cached": 1721,
+  "cost": 0.0079202,
+  "cost_source": "openrouter metered",
+  "model": "openai/gpt-6-sol",
+  "provider": "OpenAI",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3122,
+  "out": 1361,
+  "reasoning": 492,
+  "cached": 1977,
+  "cost": 0.0168664,
+  "cost_source": "openrouter metered",
+  "model": "openai/gpt-6-sol",
+  "provider": "OpenAI",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4028,
+  "out": 278,
+  "reasoning": 207,
+  "cached": 3119,
+  "cost": 0.0056748,
+  "cost_source": "openrouter metered",
+  "model": "openai/gpt-6-sol",
+  "provider": "OpenAI",
+  "stop": "stop"
+ }
+]

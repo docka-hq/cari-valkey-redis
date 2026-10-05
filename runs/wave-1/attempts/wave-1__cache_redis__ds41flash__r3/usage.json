@@ -1,0 +1,79 @@
+[
+ {
+  "in": 672,
+  "out": 127,
+  "reasoning": 1,
+  "cached": 671,
+  "cost": 5.759e-05,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Sail Research",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2482,
+  "out": 465,
+  "reasoning": 281,
+  "cached": 512,
+  "cost": 0.00034872,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Sail Research",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4938,
+  "out": 2649,
+  "reasoning": 1616,
+  "cached": 2304,
+  "cost": 0.00129336,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Sail Research",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5997,
+  "out": 437,
+  "reasoning": 116,
+  "cached": 4864,
+  "cost": 0.00031408,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Sail Research",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6523,
+  "out": 630,
+  "reasoning": 274,
+  "cached": 5888,
+  "cost": 0.00036168,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Sail Research",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7166,
+  "out": 129,
+  "reasoning": 45,
+  "cached": 6400,
+  "cost": 0.00017688,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Sail Research",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7275,
+  "out": 440,
+  "reasoning": 1,
+  "cached": 7168,
+  "cost": 0.00025624,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "Sail Research",
+  "stop": "stop"
+ }
+]

@@ -1,0 +1,216 @@
+$ cat /app/catalog.py
+hares one cache
+instead of hitting the (slow, ~300 ms) inventory service on every call.
+"""
+import json
+import time
+import urllib.request
+
+import redis
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+
+# --- Redis cache configuration --------------------------------------------
+REDIS_URL = "redis://127.0.0.1:6379/0"
+CACHE_TTL = 300  # seconds: a cached product expires after 5 minutes
+
+# Version markers live longer than the entries they guard, so a version
+# counter can never be reset (and then reused) while an entry written under
+# the previous version could still be cached.
+_VERSION_TTL = CACHE_TTL * 12
+
+# Single-flight: while one process fetches a cold key the others wait (briefly)
+# for the shared cache instead of all hammering the inventory service.
+_LOCK_TTL = 10    # seconds the fetch lock may live before it expires
+_WAIT = 1.0       # seconds a waiter waits for the leader before fetching itself
+_POLL = 0.02      # seconds between waiter cache checks
+_RETRIES = 4      # times to restart a read that was invalidated mid-flight
+
+# A single module-level client shared by all threads in the process.  redis-py's
+# connection pool is fork-safe (it notices a changed PID and reconnects), so
+# importing this module in a forked worker just works.
+_redis = redis.Redis.from_url(
+    REDIS_URL, decode_responses=True, socket_timeout=2, socket_connect_timeout=2
+)
+
+
+def _cache_key(product_id: int, version: int) -> str:
+    return f"catalog:product:{product_id}:v{version}"
+
+
+def _version_key(product_id: int) -> str:
+    return f"catalog:product:{product_id}:version"
+
+
+def _lock_key(product_id: int, version: int) -> str:
+    return f"catalog:product:{product_id}:v{version}:lock"
+
+
+def _get_version(product_id: int) -> int:
+    """Current cache generation for a product (0 when it was never invalidated)."""
+    value = _redis.get(_version_key(product_id))
+    return int(value) if value is not None else 0
+
+
+def _bump_version(product_id: int) -> int:
+    """Invalidate every cached entry for a product, returning the new version."""
+    pipe = _redis.pipeline()
+    pipe.incr(_version_key(product_id))
+    pipe.expire(_version_key(product_id), _VERSION_TTL)
+    version, _ = pipe.execute()
+    return int(version)
+
+
+def _fetch_product(product_id: int) -> dict:
+    with urllib.request.urlopen(f"{INVENTORY_URL}/products/{int(product_id)}", timeout=10) as resp:
+        return json.load(resp)
+
+
+def get_product(product_id: int) -> dict:
+    product_id = int(product_id)
+
+    for attempt in range(_RETRIES):
+        # Read the current version together with the entry cached under it.  A
+        # cache failure must never take the storefront down, so fall back to
+        # the inventory service if Redis is unavailable.
+        try:
+            version = _get_version(product_id)
+            key = _cache_key(product_id, version)
+            cached = _redis.get(key)
+        except redis.RedisError:
+            return _fetch_product(product_id)
+
+        if cached is not None:
+            return json.loads(cached)
+
+        # Cache miss.  Let a single process fetch while the others briefly wait
+        # for it, so a cold (or just-invalidated) key does not stampede the
+        # inventory service when many processes ask for it at once.
+        lock_key = _lock_key(product_id, version)
+        try:
+            is_leader = _redis.set(lock_key, "1", nx=True, ex=_LOCK_TTL)
+        except redis.RedisError:
+            return _fetch_product(product_id)
+
+        if not is_leader:
+            deadline = time.monotonic() + _WAIT
+            while time.monotonic() < deadline:
+                time.sleep(_POLL)
+                try:
+                    cached = _redis.get(key)
+                    if cached is not None:
+                        return json.loads(cached)
+                    if _get_version(product_id) != version:
+                        break  # invalidated while we waited: restart the read
+                    if not _redis.exists(lock_key):
+                        break  # leader gave up: fetch it ourselves
+                except redis.RedisError:
+                    break
+            else:
+                # Waited the full time and the leader is still not done.
+                return _fetch_product(product_id)
+            continue  # retry with the (possibly new) version
+
+        # Leader: fetch once and populate the shared cache.
+        try:
+            product = _fetch_product(product_id)
+        except BaseException:
+            try:
+                _redis.delete(lock_key)  # let waiters retry promptly
+            except redis.RedisError:
+                pass
+            raise
+        try:
+            _redis.set(key, json.dumps(product), ex=CACHE_TTL)
+        except redis.RedisError:
+            pass
+        finally:
+            try:
+                _redis.delete(lock_key)
+            except redis.RedisError:
+                pass
+        return product
+
+    return _fetch_product(product_id)
+
+
+def update_price(product_id: int, price: float) -> None:
+    product_id = int(product_id)
+    body = json.dumps({"price": price}).encode()
+    req = urllib.request.Request(
+        f"{INVENTORY_URL}/products/{product_id}",
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+
+    # Invalidate the cache *after* the inventory write has completed, so no
+    # process keeps serving the old price.  Bumping the version makes every
+    # entry cached under the previous version unreachable; that also prevents a
+    # reader that is concurrently fetching the old value from resurrecting it,
+    # because it would store it under the now-obsolete version.
+    try:
+        _bump_version(product_id)
+    except redis.RedisError:
+        # Best effort: at least drop whatever is cached right now.
+        try:
+            _redis.delete(_cache_key(product_id, _get_version(product_id)))
+        except redis.RedisError:
+            pass
+
+
+$ ls -la /app
+total 24
+drwxr-xr-x 1 root root 4096 Oct  3 05:20 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:13 ..
+drwxr-xr-x 2 root root 4096 Oct  3 05:20 __pycache__
+-rw-r--r-- 1 root root 6276 Oct  3 05:20 catalog.py
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     redis-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    719 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> RedisTimeSeries version 81001, git_sha=
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> Registering configuration options: [
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-compaction-policy   :              }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-num-threads         :            3 }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-retention-policy    :            0 }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-duplicate-policy    :        block }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-encoding            :   compressed }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> 	{ ts-topology-events     :         true }
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> ]
+9:M 03 Oct 2026 05:13:34.394 * <timeseries> Detected redis oss (cluster-enabled=no)
+9:M 03 Oct 2026 05:13:34.395 * <timeseries> Subscribe to ASM events
+9:M 03 Oct 2026 05:13:34.395 * <timeseries> Subscribe to topology changes events
+9:M 03 Oct 2026 05:13:34.395 * <timeseries> Enabled diskless replication
+9:M 03 Oct 2026 05:13:34.395 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+9:M 03 Oct 2026 05:13:34.395 * Server initialized
+9:M 03 Oct 2026 05:13:34.395 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:13:34.395 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+9:M 03 Oct 2026 05:20:19.466 * 100 changes in 300 seconds. Saving...
+9:M 03 Oct 2026 05:20:19.466 * Background saving started by pid 491
+491:C 03 Oct 2026 05:20:19.468 * BGSAVE done, 1 keys saved, 0 keys skipped, 132 bytes written.
+491:C 03 Oct 2026 05:20:19.471 * DB saved on disk
+491:C 03 Oct 2026 05:20:19.472 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+9:M 03 Oct 2026 05:20:19.567 * Background saving terminated with success
+9:M 03 Oct 2026 05:21:14.823 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:21:14.825 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

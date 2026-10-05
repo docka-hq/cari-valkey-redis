@@ -1,0 +1,189 @@
+[
+ {
+  "in": 534,
+  "out": 89,
+  "reasoning": 56,
+  "cached": 0,
+  "cost": 6.319e-05,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 889,
+  "out": 197,
+  "reasoning": 76,
+  "cached": 0,
+  "cost": 0.000129615,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1277,
+  "out": 1112,
+  "reasoning": 1083,
+  "cached": 0,
+  "cost": 0.000600695,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1813,
+  "out": 24,
+  "reasoning": 0,
+  "cached": 0,
+  "cost": 7.5455e-05,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2703,
+  "out": 3679,
+  "reasoning": 3788,
+  "cached": 0,
+  "cost": 0.001934105,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4497,
+  "out": 28709,
+  "reasoning": 30042,
+  "cached": 0,
+  "cost": 0.014511895,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4871,
+  "out": 15303,
+  "reasoning": 15816,
+  "cached": 0,
+  "cost": 0.007821985,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5268,
+  "out": 875,
+  "reasoning": 70,
+  "cached": 0,
+  "cost": 0.00062188,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6110,
+  "out": 1407,
+  "reasoning": 374,
+  "cached": 0,
+  "cost": 0.00091735,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7400,
+  "out": 1131,
+  "reasoning": 614,
+  "cached": 0,
+  "cost": 0.0008245,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8044,
+  "out": 458,
+  "reasoning": 135,
+  "cached": 0,
+  "cost": 0.00051054,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8456,
+  "out": 2455,
+  "reasoning": 1435,
+  "cached": 0,
+  "cost": 0.00152346,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9617,
+  "out": 289,
+  "reasoning": 0,
+  "cached": 8000,
+  "cost": 0.000481095,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9975,
+  "out": 587,
+  "reasoning": 184,
+  "cached": 9728,
+  "cost": 0.000642625,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 10444,
+  "out": 1046,
+  "reasoning": 0,
+  "cached": 9728,
+  "cost": 0.00088854,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11624,
+  "out": 178,
+  "reasoning": 53,
+  "cached": 11264,
+  "cost": 0.00049584,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11816,
+  "out": 644,
+  "reasoning": 53,
+  "cached": 11264,
+  "cost": 0.00073556,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "stop"
+ }
+]

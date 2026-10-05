@@ -1,0 +1,136 @@
+$ cat /app/search.py
+"""Semantic search over knowledge-base articles using Valkey's vector index.
+
+Usage: python3 /app/search.py < query.json
+where query.json contains a single query embedding (JSON list of 64 floats).
+Prints the ids of the 5 articles most cosine-similar to the query, one per
+line, most similar first.
+
+All similarity computation happens inside Valkey (FT.SEARCH KNN over the
+`idx:articles` vector index); this script never reads the source data file
+and never computes similarities itself.
+"""
+import json
+import struct
+import sys
+
+import valkey
+
+INDEX_NAME = "idx:articles"
+KEY_PREFIX = "kb:"
+DIM = 64
+K = 5
+
+
+def main() -> None:
+    query = json.load(sys.stdin)
+    if not isinstance(query, list) or len(query) != DIM:
+        sys.exit(f"query embedding must be a JSON list of {DIM} floats")
+
+    query_blob = struct.pack(f"<{DIM}f", *[float(x) for x in query])
+
+    c = valkey.Valkey(host="127.0.0.1", port=6379, decode_responses=False)
+
+    # Exact KNN search executed by Valkey's search module.  The KNN clause
+    # orders the reply by ascending distance (cosine distance = 1 - cosine
+    # similarity), so the first document is the most similar article.
+    # RETURN 1 id fetches the article id stored in each hash.
+    reply = c.execute_command(
+        "FT.SEARCH", INDEX_NAME,
+        f"*=>[KNN {K} @embedding $vec AS score]",
+        "RETURN", "1", "id",
+        "PARAMS", "2", "vec", query_blob,
+        "DIALECT", "2",
+    )
+
+    if not isinstance(reply, list) or len(reply) < 1 + 2 * K:
+        sys.exit(f"unexpected FT.SEARCH reply: {reply!r}")
+
+    # Reply: [total, key, [field, value], key, [field, value], ...]
+    results = []
+    for key, attrs in zip(reply[1::2], reply[2::2]):
+        key = key.decode() if isinstance(key, bytes) else str(key)
+        article_id = None
+        if isinstance(attrs, (list, tuple)):
+            for i in range(0, len(attrs) - 1, 2):
+                field = attrs[i].decode() if isinstance(attrs[i], bytes) else str(attrs[i])
+                if field == "id":
+                    val = attrs[i + 1]
+                    article_id = val.decode() if isinstance(val, bytes) else str(val)
+        results.append(article_id if article_id else key[len(KEY_PREFIX):])
+
+    for article_id in results:
+        print(article_id)
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 16
+drwxr-xr-x 1 root root 4096 Oct  3 07:39 .
+drwxr-xr-x 1 root root 4096 Oct  3 07:30 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 2310 Oct  3 07:41 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+idx:articles
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     [valkey-server] <defunct>
+     10 root     python3 /opt/upstream/server.py
+    372 root     valkey-server 127.0.0.1:6379
+    509 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+372:M 03 Oct 2026 07:42:17.991 # <search> [warning], tid: 139401431619392, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_deferred_entry_cnt Flags:1
+372:M 03 Oct 2026 07:42:17.991 # <search> [warning], tid: 139401431619392, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+372:M 03 Oct 2026 07:42:17.991 # <search> [warning], tid: 139401431619392, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+372:M 03 Oct 2026 07:42:17.991 # <search> [warning], tid: 139401431619392, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+372:M 03 Oct 2026 07:42:17.991 # <search> [warning], tid: 139401431619392, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+372:M 03 Oct 2026 07:42:17.991 # <search> [warning], tid: 139401431619392, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+372:M 03 Oct 2026 07:42:17.991 # <search> [notice], tid: 139401431619392, /vmsdk/src/module.cc:148: search module was successfully loaded!
+372:M 03 Oct 2026 07:42:17.991 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+372:M 03 Oct 2026 07:42:17.991 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+372:M 03 Oct 2026 07:42:17.991 * <bf> Created new data type 'bloomfltr'
+372:M 03 Oct 2026 07:42:17.991 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+372:M 03 Oct 2026 07:42:17.992 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+372:M 03 Oct 2026 07:42:17.992 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+372:M 03 Oct 2026 07:42:17.993 * Static Module 'lua' successfully loaded
+372:M 03 Oct 2026 07:42:17.993 * Server initialized
+372:M 03 Oct 2026 07:42:17.993 * Cleaning slot migration log in anticipation of a load operation.
+372:M 03 Oct 2026 07:42:17.993 * Loading RDB produced by Valkey version 9.1.2
+372:M 03 Oct 2026 07:42:17.993 * RDB age 1 seconds
+372:M 03 Oct 2026 07:42:17.993 * RDB memory usage when created 8.39 Mb
+372:M 03 Oct 2026 07:42:17.995 # <search> [notice], tid: 139401431619392, /src/rdb_serialization.cc:166: Loading RDB from version: 1.2.0 with 1 sections.
+372:M 03 Oct 2026 07:42:17.998 # <search> [notice], tid: 139401431619392, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 1000)
+372:M 03 Oct 2026 07:42:18.001 # <search> [notice], tid: 139401431619392, /src/index_schema.cc:1468: Loading Index Extension, keys = 1000
+372:M 03 Oct 2026 07:42:18.008 # <search> [notice], tid: 139401431619392, /src/index_schema.cc:1530: Loading Mutation Entries, entries = 0
+372:M 03 Oct 2026 07:42:18.008 # <search> [notice], tid: 139401431619392, /src/index_schema.cc:1543: Loading Multi/Exec Entries, entries = 0
+372:M 03 Oct 2026 07:42:18.008 # <search> [notice], tid: 139401431619392, /src/index_schema.cc:1679: Loaded index schema with 3 attributes
+372:M 03 Oct 2026 07:42:18.008 # <search> [notice], tid: 139401431619392, /src/schema_manager.cc:712: Loading index from RDB: *redacted* (in db 0)
+372:M 03 Oct 2026 07:42:18.008 * Done loading RDB, keys loaded: 1000, keys expired: 0, all fields expired hashes: 0.
+372:M 03 Oct 2026 07:42:18.008 # <search> [notice], tid: 139401431619392, /src/index_schema.cc:1736: RDB load completed,  Mutation Queue contains 0 entries. Backfill not needed.
+372:M 03 Oct 2026 07:42:18.008 * DB loaded from disk: 0.015 seconds
+372:M 03 Oct 2026 07:42:18.008 * Ready to accept connections tcp
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

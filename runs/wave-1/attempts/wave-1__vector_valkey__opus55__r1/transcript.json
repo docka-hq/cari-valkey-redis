@@ -1,0 +1,106 @@
+[
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_01W6BZT7YzsCwFtvWNm5QebD",
+    "name": "exec",
+    "input": {
+     "cmd": "head -c 400 /data/articles.jsonl; echo; wc -l /data/articles.jsonl; valkey-cli MODULE LIST; valkey-cli INFO server | head -20; python3 -c \"import valkey\" ; python3 -c \"import redis\"; pip list 2>/dev/null | grep -i -E \"valkey|redis|numpy\"; grep -v '^#' /etc/valkey/valkey.conf | grep -v '^$'"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_012NaixaTHu2qrjJyFrV7PcF",
+    "name": "exec",
+    "input": {
+     "cmd": "valkey-cli DBSIZE; valkey-cli FT._LIST; valkey-cli CONFIG GET save; valkey-cli CONFIG GET appendonly; valkey-cli KEYS '*' | head; python3 -c \"\nimport json;ids=set();n=0\nfor l in open('/data/articles.jsonl'):\n  d=json.loads(l);ids.add(d['id']);n+=1\n  assert len(d['embedding'])==64, d['id']\nprint(n,len(ids))\""
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_0174vaT7xwB91MdxnyFnoPuE",
+    "name": "fetch_doc",
+    "input": {
+     "url": "https://valkey.io/commands/ft.create/"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_016EiceWi6rdvKkzwP23LZe2",
+    "name": "exec",
+    "input": {
+     "cmd": "cat > /tmp/load.py <<'EOF'\nimport json, struct, valkey\nr = valkey.Valkey(host='127.0.0.1', port=6379)\np = r.pipeline(transaction=False)\nfor line in open('/data/articles.jsonl'):\n    d = json.loads(line)\n    p.hset(f\"article:{d['id']}\", mapping={'id': d['id'], 'title': d['title'],\n           'embedding': struct.pack('<64f', *d['embedding'])})\np.execute()\nr.execute_command('FT.CREATE','articles_idx','ON','HASH','PREFIX','1','article:','SCHEMA',\n  'id','TAG','embedding','VECTOR','FLAT','6','TYPE','FLOAT32','DIM','64','DISTANCE_METRIC','COSINE')\nEOF\npython3 /tmp/load.py && sleep 1 && valkey-cli DBSIZE && valkey-cli FT.INFO articles_idx | head -60"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_018jCdujemr9c9dXw2BHiSdJ",
+    "name": "exec",
+    "input": {
+     "cmd": "mkdir -p /app && cat > /app/search.py <<'EOF'\n#!/usr/bin/env python3\n\"\"\"Print ids of the 5 articles most similar (cosine) to the query embedding on stdin.\nThe KNN search runs inside Valkey (valkey-search index 'articles_idx', FLAT/COSINE).\"\"\"\nimport json, struct, sys\nimport valkey\n\nK = 5\nvec = json.load(sys.stdin)\nif len(vec) != 64:\n    sys.exit(f\"expected 64 floats, got {len(vec)}\")\nr = valkey.Valkey(host='127.0.0.1', port=6379)\nres = r.execute_command(\n    'FT.SEARCH', 'articles_idx', f'*=>[KNN {K} @embedding $vec AS dist]',\n    'PARAMS', '2', 'vec', struct.pack('<64f', *map(float, vec)),\n    'RETURN', '2', 'id', 'dist', 'LIMIT', '0', str(K), 'DIALECT', '2')\nhits = []\nfor i in range(1, len(res), 2):\n    f = res[i + 1]\n    d = {f[j].decode(): f[j + 1].decode() for j in range(0, len(f), 2)}\n    hits.append((float(d['dist']), d['id']))\nhits.sort()  # order by Valkey-computed distance (ascending = most similar first)\nfor _, i in hits[:K]:\n    print(i)\nEOF\ncat > /tmp/check.py <<'EOF'\nimport json, numpy as np, subprocess, random\nA=[json.loads(l) for l in open('/data/articles.jsonl')]\nids=[a['id'] for a in A]; M=np.array([a['embedding'] for a in A]); Mn=M/np.linalg.norm(M,axis=1,keepdims=True)\nrandom.seed(1); bad=0\nfor t in range(30):\n    q = (M[random.randrange(1000)] + np.random.normal(0,0.1,64)) if t%2 else np.random.normal(0,1,64)\n    s=Mn@(q/np.linalg.norm(q)); exp=[ids[i] for i in np.argsort(-s)[:5]]\n    out=subprocess.run(['python3','/app/search.py'],input=json.dumps(q.tolist()),capture_output=True,text=True).stdout.split()\n    if out!=exp: bad+=1; print(out,exp,sorted(s)[-6:])\nprint('mismatches',bad)\nEOF\npython3 /tmp/check.py"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "Matches brute-force results on 30 test queries. Now persisting to disk so the data survives a restart:",
+  "tool_calls": [
+   {
+    "id": "toolu_01UzYRFgxchJxeH2zD61s9dU",
+    "name": "exec",
+    "input": {
+     "cmd": "valkey-cli SAVE; ls -la /var/lib/valkey; echo '[0.1,0.2]' | python3 /app/search.py; python3 -c \"import json;print(json.dumps(json.loads(open('/data/articles.jsonl').readline())['embedding']))\" | python3 /app/search.py"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "Let me confirm the index and data come back after a restart:",
+  "tool_calls": [
+   {
+    "id": "toolu_01SMMbDeBQgPJUjDtuUfnsiX",
+    "name": "exec",
+    "input": {
+     "cmd": "valkey-cli SHUTDOWN SAVE; sleep 1; valkey-server /etc/valkey/valkey.conf; sleep 2; valkey-cli DBSIZE; valkey-cli FT._LIST; valkey-cli FT.INFO articles_idx | grep -A1 -E 'num_docs|backfill_in_progress'; python3 /tmp/check.py"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "Semantic search over the 1,000 articles now runs inside Valkey. On 30 test queries, `search.py` returned exactly the same top 5 as a separate brute-force cosine calculation.\n\n**1. Loading the articles**\n- Each article is stored as a hash under the key `article:<id>`, holding its `id`, `title` and `embedding`. The embedding is stored as 64 FLOAT32 numbers in binary form.\n- On top of these I created a search index, `articles_idx`, using cosine distance. It's an exact index (FLAT): it compares the query against every article, so results aren't approximations.\n- The index reports 1,000 documents and no indexing failures.\n\n**2. `/app/search.py`**\n- It reads the 64 floats from stdin and asks Valkey's search module for the 5 nearest articles by cosine distance. It then prints their `id`s, most similar first.\n- It doesn't open `/data/articles.jsonl` or compute any similarities. Its only sorting step puts the 5 results in order using the distances Valkey returns.\n- It needs only the `valkey` Python package, which is already installed.\n- If the query doesn't have exactly 64 numbers, it stops with an error message.\n\n**Checks**\n- The 30 test queries were half random vectors and half slightly altered copies of real articles.\n- Querying with article `kb-0001`'s own embedding returns `kb-0001` first.\n- I saved the data to disk (`/var/lib/valkey/dump.rdb`) and restarted Valkey with its normal config. All 1,000 articles and the index came back, and the 30-query check still passed afterwards.\n\nThe loader script I used is at `/tmp/load.py` if you need to rebuild.",
+  "tool_calls": [],
+  "stop": "end_turn"
+ }
+]

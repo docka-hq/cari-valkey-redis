@@ -1,0 +1,156 @@
+[
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "ps aux | grep -E 'redis|valkey' | grep -v grep; ls -l /etc/redis-old/redis.conf /etc/valkey/valkey.conf; /opt/redis-8.10/bin/redis-cli -p 6379 INFO server | head -30; command -v valkey-cli redis-cli"
+  },
+  "output": "exit=0\nstdout:\nroot           9  1.2  0.1 145848 10848 ?        Ssl  06:44   0:00 /opt/redis-8.10/bin/redis-server 127.0.0.1:6379\nroot          16  0.1  0.1  77524  8540 ?        Ssl  06:44   0:00 valkey-server 127.0.0.1:6380\n-rw-r--r-- 1 root root 226 Oct  3 06:40 /etc/redis-old/redis.conf\n-rw-r--r-- 1 root root 175 Oct  3 06:40 /etc/valkey/valkey.conf\n# Server\nredis_version:8.10.2\nredis_git_sha1:00000000\nredis_git_dirty:1\nredis_build_id:fbc5ac9ab55dc180\nredis_mode:standalone\nos:Linux 7.0.0-15-generic x86_64\narch_bits:64\nmonotonic_clock:POSIX clock_gettime\nmultiplexing_api:epoll\natomicvar_api:c11-builtin\ngcc_version:14.2.0\nprocess_id:9\nprocess_supervised:no\nrun_id:47e6148fd2df0b5adabd5451c021c96ac1cd2ca5\ntcp_port:6379\nserver_time_usec:1791009888649342\nuptime_in_seconds:9\nuptime_in_days:0\nhz:10\nconfigured_hz:10\nlru_clock:12624992\nexecutable:/opt/redis-8.10/bin/redis-server\nconfig_file:/etc/redis-old/redis.conf\nio_threads_active:0\nlistener0:name=tcp,bind=127.0.0.1,bind=-::1,port=6379\n/usr/local/bin/valkey-cli\n/usr/local/bin/redis-cli\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "grep -En '^(bind|port|requirepass|masterauth|replicaof|appendonly|dir |dbfilename|save |databases|aclfile|loadmodule|protected-mode)' /etc/redis-old/redis.conf /etc/valkey/valkey.conf"
+  },
+  "output": "exit=0\nstdout:\n/etc/redis-old/redis.conf:2:bind 127.0.0.1 -::1\n/etc/redis-old/redis.conf:3:port 6379\n/etc/redis-old/redis.conf:4:protected-mode yes\n/etc/redis-old/redis.conf:8:dir /var/lib/redis-old\n/etc/redis-old/redis.conf:9:save 3600 1 300 100 60 10000\n/etc/valkey/valkey.conf:2:bind 127.0.0.1 -::1\n/etc/valkey/valkey.conf:3:port 6380\n/etc/valkey/valkey.conf:4:protected-mode yes\n/etc/valkey/valkey.conf:8:dir /var/lib/valkey\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "cat /etc/redis-old/redis.conf /etc/valkey/valkey.conf; valkey-cli -p 6380 INFO server | head -28; /opt/redis-8.10/bin/redis-cli -p 6379 INFO keyspace; /opt/redis-8.10/bin/redis-cli -p 6379 INFO replication; /opt/redis-8.10/bin/redis-cli -p 6379 MODULE LIST; valkey-cli -p 6380 INFO keyspace"
+  },
+  "output": "exit=0\nstdout:\n# Redis 8.10 - current production server\nbind 127.0.0.1 -::1\nport 6379\nprotected-mode yes\ndaemonize yes\npidfile /run/redis-old/redis.pid\nlogfile /var/log/redis-old/redis.log\ndir /var/lib/redis-old\nsave 3600 1 300 100 60 10000\n# Valkey 9.1 - new server\nbind 127.0.0.1 -::1\nport 6380\nprotected-mode yes\ndaemonize yes\npidfile /run/valkey/valkey.pid\nlogfile /var/log/valkey/valkey.log\ndir /var/lib/valkey\n# Server\nredis_version:7.2.4\nserver_name:valkey\nvalkey_version:9.1.2\nvalkey_release_stage:ga\nredis_git_sha1:00000000\nredis_git_dirty:0\nredis_build_id:16129465b18d72a\nserver_mode:standalone\nos:Linux 7.0.0-15-generic x86_64\narch_bits:64\nmonotonic_clock:POSIX clock_gettime\nmultiplexing_api:epoll\ngcc_version:14.2.0\nprocess_id:16\nprocess_supervised:no\nrun_id:1f9f38cae24b37e5c3806b775c6a1bb00c8fb4c5\ntcp_port:6380\nserver_time_usec:1791009892015355\nuptime_in_seconds:13\nuptime_in_days:0\nhz:10\nconfigured_hz:10\nclients_hz:10\nlru_clock:12624996\nexecutable:/root/valkey-server\nconfig_file:/etc/valkey/valkey.conf\nio_threads_active:0\n# Keyspace\ndb0:keys=2960,expires=900,avg_ttl=38788813,subexpiry=40\ndb2:keys=350,expires=150,avg_ttl=43471239,subexpiry=0\n# Replication\nrole:master\nconnected_slaves:0\nmaster_failover_state:no-failover\nmaster_replid:e607a1ee274155d824aea0b7ced841fbdfc23490\nmaster_replid2:0000000000000000000000000000000000000000\nmaster_repl_offset:0\nsecond_repl_offset:-1\nrepl_backlog_active:0\nrepl_backlog_size:1048576\nrepl_backlog_first_byte_offset:0\nrepl_backlog_histlen:0\nname\nvectorset\nver\n1\npath\n\nargs\n\n# Keyspace\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "which redis-cli valkey-cli; ls -lah /var/lib/{redis-old,valkey}; /opt/redis-8.10/bin/redis-cli -p 6379 CONFIG GET databases appendonly; valkey-cli -p 6380 CONFIG GET databases appendonly"
+  },
+  "output": "exit=0\nstdout:\n/usr/local/bin/redis-cli\n/usr/local/bin/valkey-cli\n/var/lib/redis-old:\ntotal 12K\ndrwxr-xr-x 2 root root 4.0K Oct  3 06:44 .\ndrwxr-xr-x 1 root root 4.0K Oct  3 06:44 ..\n-rw-r--r-- 1 root root   89 Oct  3 06:44 dump.rdb\n\n/var/lib/valkey:\ntotal 8.0K\ndrwxr-xr-x 2 root root 4.0K Oct  3 06:44 .\ndrwxr-xr-x 1 root root 4.0K Oct  3 06:44 ..\ndatabases\n16\nappendonly\nno\nappendonly\nno\ndatabases\n16\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": " /opt/redis-8.10/bin/redis-cli -p 6379 INFO modules; valkey-cli -p 6380 MODULE LIST; /opt/redis-8.10/bin/redis-cli -p 6379 INFO persistence | head -50; valkey-cli -p 6380 COMMAND INFO RESTORE | head -25; ls /opt/redis-8.10/bin; ls /usr/local/bin | grep -E '(redis|valkey)'"
+  },
+  "output": "exit=0\nstdout:\n# Modules\nmodule:name=vectorset,ver=1,api=1,filters=0,usedby=[],using=[],options=[handle-io-errors|handle-repl-async-load]\nname\nlua\nver\n1\npath\nlua\nargs\n\n# Persistence\nloading:0\nasync_loading:0\ncurrent_cow_peak:0\ncurrent_cow_size:0\ncurrent_cow_size_age:0\ncurrent_fork_perc:0.00\ncurrent_save_keys_processed:0\ncurrent_save_keys_total:0\nrdb_changes_since_last_save:27894\nrdb_bgsave_in_progress:0\nrdb_last_save_time:1791009879\nrdb_last_bgsave_status:ok\nrdb_last_bgsave_time_sec:-1\nrdb_current_bgsave_time_sec:-1\nrdb_saves:0\nrdb_saves_consecutive_failures:0\nrdb_last_cow_size:0\nrdb_last_load_keys_expired:0\nrdb_last_load_keys_loaded:0\naof_enabled:0\naof_rewrite_in_progress:0\naof_rewrite_scheduled:0\naof_last_rewrite_time_sec:-1\naof_current_rewrite_time_sec:-1\naof_last_bgrewrite_status:ok\naof_rewrites:0\naof_rewrites_consecutive_failures:0\naof_last_write_status:ok\naof_last_cow_size:0\nbackup_in_progress:0\nmodule_fork_in_progress:0\nmodule_fork_last_cow_size:0\nrestore\n-4\nwrite\ndenyoom\n1\n1\n1\n@keyspace\n@write\n@slow\n@dangerous\n\nflags\nOW\nupdate\nbegin_search\ntype\nindex\nspec\nindex\n1\nfind_keys\ntype\nrange\nspec\nredis-cli\nredis-server\nredis-benchmark\nredis-check-aof\nredis-check-rdb\nredis-cli\nredis-sentinel\nredis-server\nvalkey-benchmark\nvalkey-check-aof\nvalkey-check-rdb\nvalkey-cli\nvalkey-sentinel\nvalkey-server\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": " /opt/redis-8.10/bin/redis-cli -p 6379 --scan | head -35; /opt/redis-8.10/bin/redis-cli -p 6379 INFO stats | grep -E 'expired_keys|total_commands_processed'; valkey-cli -p 6380 COMMAND INFO MIGRATE | head -10"
+  },
+  "output": "exit=0\nstdout:\nsession:00728\nsession:01514\nleaderboard:046\nsession:00845\nsession:00306\nprofile:30\nsession:00852\nsession:01482\nuser:0187\nsession:01323\nsession:00784\nsession:01548\nsession:01675\nsession:01325\nsession:01407\nsession:00072\nsession:01579\nsession:01868\nsession:01875\nsession:01790\ntags:099\nsession:00284\nevents:07\nsession:00971\nsession:00801\nsession:00981\nsession:00341\nsession:00364\ntags:060\nsession:01757\nuser:0063\nsession:00792\nsession:00247\nuser:0303\nsession:01046\ntotal_commands_processed:16783\nexpired_keys:0\nexpired_keys_active:0\nmigrate\n-6\nwrite\nmovablekeys\n3\n3\n1\n@keyspace\n@write\n@slow\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "valkey-cli -p 6380 COMMAND INFO VADD HPEXPIREAT HSETEX XGROUP | head -100; /opt/redis-8.10/bin/redis-cli -p 6379 COMMAND INFO VADD | head -60; python3 - <<'PY'\nimport importlib.util\nprint(importlib.util.find_spec('redis'))\nPY"
+  },
+  "output": "exit=0\nstdout:\n\nhpexpireat\n-6\nwrite\nfast\n1\n1\n1\n@write\n@hash\n@fast\n\nflags\nRW\nupdate\nbegin_search\ntype\nindex\nspec\nindex\n1\nfind_keys\ntype\nrange\nspec\nlastkey\n0\nkeystep\n1\nlimit\n0\n\nhsetex\n-6\nwrite\ndenyoom\nfast\n1\n1\n1\n@write\n@hash\n@fast\n\nflags\nRW\ninsert\nbegin_search\ntype\nindex\nspec\nindex\n1\nfind_keys\ntype\nrange\nspec\nlastkey\n0\nkeystep\n1\nlimit\n0\n\nxgroup\n-2\n\n0\n0\n0\n@slow\n\n\nxgroup|create\n-5\nwrite\ndenyoom\n2\n2\n1\n@write\n@stream\n@slow\n\nflags\nRW\ninsert\nbegin_search\ntype\nindex\nspec\nindex\n2\nfind_keys\ntype\nrange\nspec\nlastkey\n0\nkeystep\nVADD\n-5\nwrite\ndenyoom\nmodule\n1\n1\n1\n\n\nflags\nRW\naccess\nupdate\nbegin_search\ntype\nindex\nspec\nindex\n1\nfind_keys\ntype\nrange\nspec\nlastkey\n0\nkeystep\n1\nlimit\n0\n\nModuleSpec(name='redis', loader=<_frozen_importlib_external.SourceFileLoader object at 0x73d4068085a0>, origin='/usr/local/lib/python3.13/dist-packages/redis/__init__.py', submodule_search_locations=['/usr/local/lib/python3.13/dist-packages/redis'])\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": " /opt/redis-8.10/bin/redis-cli -p 6379 --raw TYPE events:07; /opt/redis-8.10/bin/redis-cli -p 6379 --raw TYPE leaderboard:046; /opt/redis-8.10/bin/redis-cli -p 6379 --raw TYPE profile:30; /opt/redis-8.10/bin/redis-cli -p 6379 --raw TYPE tags:099; /opt/redis-8.10/bin/redis-cli -p 6379 --raw TYPE user:0187; valkey-cli -p 6380 INFO modules"
+  },
+  "output": "exit=0\nstdout:\nstream\nzset\nhash\nset\nhash\n# Modules\nmodule:name=lua,ver=1,api=1,filters=0,usedby=[],using=[],options=[handle-repl-async-load|handle-atomic-slot-migration]\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "python3 - <<'PY'\nimport redis,collections\nr=redis.Redis(port=6379); print([ (i,r.execute_command('DBSIZE') if False else redis.Redis(port=6379,db=i).dbsize()) for i in range(16)]);\nfor db in (0,2):\n c=collections.Counter(); sample={}; rr=redis.Redis(port=6379,db=db)\n for k in rr.scan_iter(count=1000):\n  t=rr.type(k).decode();c[t]+=1;sample.setdefault(t,k)\n print(db,c,sample)\nPY\nfind / -iname '*vector*so' -o -iname '*vector*.so' 2>/dev/null | head; valkey-cli -p 6380 COMMAND INFO VADD | head -4; valkey-cli -p 6380 COMMAND INFO HEXPIRE | head -4"
+  },
+  "output": "exit=0\nstdout:\n[(0, 2960), (1, 0), (2, 350), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0), (10, 0), (11, 0), (12, 0), (13, 0), (14, 0), (15, 0)]\n0 Counter({'string': 2045, 'hash': 440, 'zset': 155, 'set': 150, 'list': 150, 'stream': 20}) {'string': b'session:00728', 'zset': b'leaderboard:046', 'hash': b'profile:30', 'set': b'tags:099', 'stream': b'events:07', 'list': b'queue:079'}\n2 Counter({'string': 300, 'hash': 50}) {'hash': b'cache:fragment:10', 'string': b'cache:page:122'}\n\nhexpire\n-6\nwrite\nfast\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "python3 - <<'PY'\nimport redis\nr=redis.Redis(port=6379);v=redis.Redis(port=6380)\nfor k in [b'session:00728',b'leaderboard:046',b'profile:30',b'tags:099',b'events:07',b'queue:079']:\n try:\n  print(k, r.type(k),len(r.dump(k) or b''),v.restore(b'__migration_test__',0,r.dump(k),replace=True));v.delete(b'__migration_test__')\n except Exception as e: print(type(e).__name__,str(e)[:400])\nPY"
+  },
+  "output": "exit=0\nstdout:\nResponseError DUMP payload version or checksum are wrong\nResponseError DUMP payload version or checksum are wrong\nResponseError DUMP payload version or checksum are wrong\nResponseError DUMP payload version or checksum are wrong\nResponseError DUMP payload version or checksum are wrong\nResponseError DUMP payload version or checksum are wrong\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "python3 - <<'PY'\nimport redis,collections\nr=redis.Redis(port=6379,decode_responses=False)\nfor k in [b'events:07',b'profile:30']:\n print(k,'type',r.type(k),'ttl',r.pttl(k))\n if r.type(k)==b'stream':\n  print('stream info',r.xinfo_stream(k,full=True,count=3));print('groups',r.xinfo_groups(k));\n  for g in r.xinfo_groups(k):\n   print('consumers',r.xinfo_consumers(k,g[b'name']));print('pending',r.xpending_range(k,g[b'name'],'-','+',3))\n else:\n  print('field expires',r.execute_command('HPEXPIRETIME',k,'FIELDS',1,next(iter(r.hkeys(k)))))\nPY"
+  },
+  "output": "exit=1\nstdout:\nb'events:07' type b'stream' ttl -1\n\nstderr:\nTraceback (most recent call last):\n  File \"<stdin>\", line 6, in <module>\nTypeError: StreamCommands.xinfo_stream() got an unexpected keyword argument 'count'\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "python3 - <<'PY'\nimport redis,pprint\nr=redis.Redis(port=6379)\nk=b'events:07'\nprint('xinfo',r.execute_command('XINFO','STREAM',k,'FULL','COUNT',2));print('groups',r.xinfo_groups(k));\nfor g in r.xinfo_groups(k):\n print('consumers',r.xinfo_consumers(k,g[b'name']));print('pending',r.xpending_range(k,g[b'name'],'-','+',3));print('group full',r.execute_command('XINFO','STREAM',k,'FULL','COUNT',2))\nprint('hash',r.execute_command('HPEXPIRETIME','profile:30','FIELDS',1,next(iter(r.hkeys('profile:30')))))\nprint('help',redis.__version__)\nPY"
+  },
+  "output": "exit=1\nstdout:\nxinfo {b'length': 50, b'radix-tree-keys': 1, b'radix-tree-nodes': 1, b'last-generated-id': b'1767226300049-0', b'max-deleted-entry-id': b'0-0', b'entries-added': 50, b'recorded-first-entry-id': b'1767226300000-0', b'idmp-duration': 100, b'idmp-maxsize': 100, b'pids-tracked': 0, b'iids-tracked': 0, b'iids-added': 0, b'iids-duplicates': 0, b'entries': [[b'1767226300000-0', [b'type', b'buy', b'user', b'281', b'n', b'0']], [b'1767226300001-0', [b'type', b'signup', b'user', b'26', b'n', b'1']]], b'groups': [{b'name': b'workers', b'last-delivered-id': b'1767226300024-0', b'entries-read': 25, b'lag': 25, b'pel-count': 15, b'nacked-count': 0, b'pending': [[b'1767226300010-0', b'w1', 1791009879930, 1], [b'1767226300011-0', b'w1', 1791009879930, 1]], b'consumers': [{b'name': b'w1', b'seen-time': 1791009879930, b'active-time': 1791009879930, b'pel-count': 10, b'pending': [[b'1767226300010-0', 1791009879930, 1], [b'1767226300011-0', 1791009879930, 1]]}, {b'name': b'w2', b'seen-time': 1791009879931, b'active-time': 1791009879931, b'pel-count': 5, b'pending': [[b'1767226300020-0', 1791009879931, 1], [b'1767226300021-0', 1791009879931, 1]]}]}]}\ngroups [{'name': b'workers', 'consumers': 2, 'pending': 15, 'last-delivered-id': b'1767226300024-0', 'entries-read': 25, 'lag': 25}]\n\nstderr:\nTraceback (most recent call last):\n  File \"<stdin>\", line 6, in <module>\nKeyError: b'name'\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "python3 - <<'PY'\nimport redis\nr=redis.Redis(port=6379);v=redis.Redis(port=6380)\nfor k in (b'profile:30',b'cache:fragment:10'):\n rr=redis.Redis(port=6379,db=2 if k.startswith(b'cache:') else 0)\n print(k,rr.hgetall(k),rr.execute_command('HPEXPIRETIME',k,'FIELDS',*([len(rr.hkeys(k))]+rr.hkeys(k))))\nprint('stream',v.execute_command('COMMAND','INFO','XSETID'))\nprint('source ktypes',r.info('keyspace'))\nPY"
+  },
+  "output": "exit=0\nstdout:\nb'profile:30' {b'reset_token': b'b77bf9310510e7bb', b'otp': b'380990', b'name': b'Profile 30', b'tier': b'pro', b'theme': b'dark', b'lang': b'en'} [1791052588947, 1791052588947, -1, -1, -1, -1]\nb'cache:fragment:10' {b'html': b'<div>10</div>', b'etag': b'673d29bc'} [-1, -1]\nstream {'xsetid': {'name': 'xsetid', 'arity': -3, 'flags': ['write', 'denyoom', 'fast'], 'first_key_pos': 1, 'last_key_pos': 1, 'step_count': 1, 'acl_categories': ['@write', '@stream', '@fast'], 'tips': [], 'key_specifications': [{b'flags': [b'RW', b'update'], b'begin_search': {b'type': b'index', b'spec': {b'index': 1}}, b'find_keys': {b'type': b'range', b'spec': {b'lastkey': 0, b'keystep': 1, b'limit': 0}}}], 'subcommands': []}}\nsource ktypes {'db0': {'keys': 2960, 'expires': 900, 'avg_ttl': 39147150, 'subexpiry': 40}, 'db2': {'keys': 350, 'expires': 150, 'avg_ttl': 43546936, 'subexpiry': 0}}\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "valkey-cli -p 6380 XHELP 2>&1 | head; python3 - <<'PY'\nimport redis\nr=redis.Redis(port=6379);v=redis.Redis(port=6380)\nprint('source',r.execute_command('XINFO','STREAM','events:07','FULL','COUNT',1))\nprint('target',v.info('server')['valkey_version'])\nPY"
+  },
+  "output": "exit=0\nstdout:\nERR unknown command 'XHELP', with args beginning with: \n\nsource {b'length': 50, b'radix-tree-keys': 1, b'radix-tree-nodes': 1, b'last-generated-id': b'1767226300049-0', b'max-deleted-entry-id': b'0-0', b'entries-added': 50, b'recorded-first-entry-id': b'1767226300000-0', b'idmp-duration': 100, b'idmp-maxsize': 100, b'pids-tracked': 0, b'iids-tracked': 0, b'iids-added': 0, b'iids-duplicates': 0, b'entries': [[b'1767226300000-0', [b'type', b'buy', b'user', b'281', b'n', b'0']]], b'groups': [{b'name': b'workers', b'last-delivered-id': b'1767226300024-0', b'entries-read': 25, b'lag': 25, b'pel-count': 15, b'nacked-count': 0, b'pending': [[b'1767226300010-0', b'w1', 1791009879930, 1]], b'consumers': [{b'name': b'w1', b'seen-time': 1791009879930, b'active-time': 1791009879930, b'pel-count': 10, b'pending': [[b'1767226300010-0', 1791009879930, 1]]}, {b'name': b'w2', b'seen-time': 1791009879931, b'active-time': 1791009879931, b'pel-count': 5, b'pending': [[b'1767226300020-0', 1791009879931, 1]]}]}]}\ntarget 9.1.2\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "date +%s%3N; python3 - <<'PY'\nimport redis\nr=redis.Redis(port=6379);v=redis.Redis(port=6380)\nprint(r.time(),v.time()); print('streams');\nfor k in r.scan_iter(match=b'events:*'):\n info=r.xinfo_stream(k); print(k,info['length'],r.xinfo_groups(k));break\nPY"
+  },
+  "output": "exit=0\nstdout:\n1791009931608\n(1791009931, 712973) (1791009931, 713756)\nstreams\nb'events:07' 50 [{'name': b'workers', 'consumers': 2, 'pending': 15, 'last-delivered-id': b'1767226300024-0', 'entries-read': 25, 'lag': 25}]\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "cat > /tmp/migrate.py <<'PY'\nimport redis, collections, sys, time\nsrc0=redis.Redis(host='127.0.0.1',port=6379)\ndst0=redis.Redis(host='127.0.0.1',port=6380)\nassert dst0.info('keyspace') == {}, 'destination is not empty'\nassert dst0.info('replication')['role']=='master'\ncounts=collections.Counter()\n\ndef stream_copy(s,d,k):\n    info=s.xinfo_stream(k)\n    entries=s.xrange(k, '-', '+')\n    for id, fields in entries:\n        args=[]\n        for f,val in fields.items(): args.extend((f,val))\n        d.execute_command('XADD',k,id,*args)\n    # Preserve stream metadata (important for subsequent XADD and consumer lag).\n    d.execute_command('XSETID',k,info['last-generated-id'],'ENTRIESADDED',info['entries-added'],'MAXDELETEDID',info['max-deleted-entry-id'])\n    for group in s.xinfo_groups(k):\n        g=group['name']\n        d.execute_command('XGROUP','CREATE',k,g,'0-0')\n        for c in s.xinfo_consumers(k,g):\n            d.execute_command('XGROUP','CREATECONSUMER',k,g,c['name'])\n        pending=s.xpending_range(k,g,'-','+',max(1,group['pending'])) if group['pending'] else []\n        for p in pending:\n            idle=max(0,int(p['time_since_delivered']))\n            d.execute_command('XCLAIM',k,g,p['consumer'],0,p['message_id'],'IDLE',idle,'RETRYCOUNT',p['times_delivered'],'FORCE','JUSTID')\n        opts=['ENTRIESREAD',group['entries-read']] if group.get('entries-read') is not None else []\n        d.execute_command('XGROUP','SETID',k,g,group['last-delivered-id'],*opts)\n        actual=d.xinfo_groups(k)[0] if len(s.xinfo_groups(k))==1 else next(x for x in d.xinfo_groups(k) if x['name']==g)\n        assert actual['pending']==group['pending'], (k,g,actual,group)\n\nfor db in range(int(src0.config_get('databases')['databases'])):\n    s=redis.Redis(host='127.0.0.1',port=6379,db=db)\n    d=redis.Redis(host='127.0.0.1',port=6380,db=db)\n    for k in s.scan_iter(count=500):\n        typ=s.type(k)\n        if typ == b'none': continue\n        if typ==b'string': d.set(k,s.get(k))\n        elif typ==b'hash':\n            values=s.hgetall(k)\n            if not values: continue\n            d.hset(k,mapping=values)\n            fields=list(values)\n            expiries=s.execute_command('HPEXPIRETIME',k,'FIELDS',len(fields),*fields)\n            for f,exp in zip(fields,expiries):\n                if exp>0: d.execute_command('HPEXPIREAT',k,exp,'FIELDS',1,f)\n        elif typ==b'list':\n            values=s.lrange(k,0,-1)\n            if values: d.rpush(k,*values)\n        elif typ==b'set':\n            values=s.smembers(k)\n            if values: d.sadd(k,*values)\n        elif typ==b'zset':\n            values=s.zrange(k,0,-1,withscores=True)\n            if values: d.zadd(k,{member:score for member,score in values})\n        elif typ==b'stream': stream_copy(s,d,k)\n        else: raise Exception(f'unknown type {db} {k!r} {typ}')\n        exp=s.pexpiretime(k)\n        if exp>0: d.pexpireat(k,exp)\n        counts[(db,typ.decode())]+=1\n    print('db',db,'source',s.dbsize(),'target',d.dbsize(),flush=True)\n    assert s.dbsize()==d.dbsize(),db\nprint('copied',counts,flush=True)\nPY\npython3 /tmp/migrate.py"
+  },
+  "output": "exit=1\nstdout:\n\nstderr:\nTraceback (most recent call last):\n  File \"/tmp/migrate.py\", line 55, in <module>\n    elif typ==b'stream': stream_copy(s,d,k)\n                         ~~~~~~~~~~~^^^^^^^\n  File \"/tmp/migrate.py\", line 25, in stream_copy\n    d.execute_command('XCLAIM',k,g,p['consumer'],0,p['message_id'],'IDLE',idle,'RETRYCOUNT',p['times_delivered'],'FORCE','JUSTID')\n    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/redis/client.py\", line 867, in execute_command\n    return self._execute_command(*args, **options)\n           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/dist-packages/redis/client.py\", line 889, in _execute_command\n    result = conn.retry.call_with_retry(\n        lambda: self._send_command_parse_response(\n    ...<3 lines>...\n        with_failure_count=True,\n    )\n  File \"/usr/local/lib/python3.13/dist-packages/redis/retry.py\", line 120, in call_with_retry\n    return do()\n  File \"/usr/local/lib/python3.13/dist-packages/redis/client.py\", line 890, in <lambda>\n    lambda: self._send_command_parse_response(\n            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^\n        conn, command_name, *args, **options\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ),\n    ^\n  File \"/usr/local/lib/python3.13/dist-packages/redis/client.py\", line 819, in _send_command_parse_response\n    return self.parse_response(conn, command_name, **options)\n         "
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "python3 /tmp/migrate.py 2>&1 | tail -12; valkey-cli -p 6380 INFO keyspace"
+  },
+  "output": "exit=0\nstdout:\nTraceback (most recent call last):\n  File \"/tmp/migrate.py\", line 4, in <module>\n    assert dst0.info('keyspace') == {}, 'destination is not empty'\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: destination is not empty\n# Keyspace\ndb0:keys=23,expires=6,avg_ttl=40851330,keys_with_volatile_items=1\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "sed -i 's/    return do()/    return do()/' /dev/null 2>/dev/null || true; python3 - <<'PY'\nimport redis\nr=redis.Redis(port=6380)\nfor k in r.scan_iter(match='events:*'):\n print(k,r.xinfo_groups(k))\n try:print(r.execute_command('XCLAIM',k,'workers','w1',0,'1767226300010-0','IDLE',100,'RETRYCOUNT',1,'FORCE','JUSTID'))\n except Exception as e:print(repr(e))\nPY"
+  },
+  "output": "exit=0\nstdout:\nb'events:07' [{'name': b'workers', 'consumers': 2, 'pending': 1, 'last-delivered-id': b'0-0', 'entries-read': None, 'lag': 50}]\nTypeError(\"'int' object is not iterable\")\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "python3 - <<'PY'\nimport inspect,redis\nfrom redis._parsers import helpers\nprint(inspect.getsource(helpers.parse_xclaim))\nPY"
+  },
+  "output": "exit=0\nstdout:\ndef parse_xclaim(response, **options):\n    if options.get(\"parse_justid\", False):\n        return response\n    return parse_stream_list(response)\n\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "sed -i \"s/'FORCE','JUSTID')/'FORCE','JUSTID',parse_justid=True)/\" /tmp/migrate.py; valkey-cli -p 6380 FLUSHALL; python3 /tmp/migrate.py"
+  },
+  "output": "exit=0\nstdout:\nOK\ndb 0 source 2960 target 2960\ndb 1 source 0 target 0\ndb 2 source 350 target 350\ndb 3 source 0 target 0\ndb 4 source 0 target 0\ndb 5 source 0 target 0\ndb 6 source 0 target 0\ndb 7 source 0 target 0\ndb 8 source 0 target 0\ndb 9 source 0 target 0\ndb 10 source 0 target 0\ndb 11 source 0 target 0\ndb 12 source 0 target 0\ndb 13 source 0 target 0\ndb 14 source 0 target 0\ndb 15 source 0 target 0\ncopied Counter({(0, 'string'): 2045, (0, 'hash'): 440, (2, 'string'): 300, (0, 'zset'): 155, (0, 'set'): 150, (0, 'list'): 150, (2, 'hash'): 50, (0, 'stream'): 20})\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "cat > /tmp/verify.py <<'PY'\nimport redis,collections,time\nissues=[]; totals=collections.Counter()\nfor db in range(16):\n s=redis.Redis(port=6379,db=db);d=redis.Redis(port=6380,db=db)\n sk=set(s.scan_iter());dk=set(d.scan_iter())\n if sk!=dk:issues.append((db,'key mismatch',sk-dk,dk-sk))\n for k in sk&dk:\n  t=s.type(k); totals[(db,t)]+=1\n  if t!=d.type(k):issues.append((db,k,'type'));continue\n  if t==b'string': same=s.get(k)==d.get(k)\n  elif t==b'hash':\n   a=s.hgetall(k);b=d.hgetall(k);same=a==b\n   fields=list(a)\n   if fields:\n    p=dict(zip(fields,s.execute_command('HPEXPIRETIME',k,'FIELDS',len(fields),*fields)))\n    q=dict(zip(fields,d.execute_command('HPEXPIRETIME',k,'FIELDS',len(fields),*fields)))\n    if p!=q:issues.append((db,k,'field expirations',p,q))\n  elif t==b'list':same=s.lrange(k,0,-1)==d.lrange(k,0,-1)\n  elif t==b'set':same=s.smembers(k)==d.smembers(k)\n  elif t==b'zset':same=s.zrange(k,0,-1,withscores=True)==d.zrange(k,0,-1,withscores=True)\n  elif t==b'stream':\n   same=s.xrange(k)==d.xrange(k)\n   si=s.xinfo_stream(k);di=d.xinfo_stream(k)\n   for field in ('length','last-generated-id','max-deleted-entry-id','entries-added','recorded-first-entry-id'):\n    if si[field]!=di[field]:issues.append((db,k,'stream info',field,si[field],di[field]))\n   sg=s.xinfo_groups(k);dg=d.xinfo_groups(k)\n   if sg!=dg:issues.append((db,k,'groups',sg,dg))\n   for g in sg:\n    n=g['name'];sc=s.xinfo_consumers(k,n);dc=d.xinfo_consumers(k,n)\n    for x in sc:\n     y=next((z for z in dc if z['name']==x['name']),None)\n     if y is None or x['pending']!=y['pending']:issues.append((db,k,'consumer',x,y))\n    sp=s.xpending_range(k,n,'-','+',max(1,g['pending'])) if g['pending'] else []\n    dp=d.xpending_range(k,n,'-','+',max(1,g['pending'])) if g['pending'] else []\n    for x,y in zip(sp,dp):\n     if (x['message_id'],x['consumer'],x['times_delivered'])!=(y['message_id'],y['consumer'],y['times_delivered']):issues.append((db,k,'pending',x,y))\n  else:issues.append((db,k,'unhandled',t));continue\n  if not same:issues.append((db,k,'value'))\n  a=s.pexpiretime(k);b=d.pexpiretime(k)\n  if a!=b:issues.append((db,k,'expiry',a,b))\nprint('counts',totals,'issues',len(issues))\nfor issue in issues[:15]: print(repr(issue)[:800])\nPY\npython3 /tmp/verify.py"
+  },
+  "output": "exit=0\nstdout:\ncounts Counter({(0, b'string'): 2045, (0, b'hash'): 440, (2, b'string'): 300, (0, b'zset'): 155, (0, b'set'): 150, (0, b'list'): 150, (2, b'hash'): 50, (0, b'stream'): 20}) issues 0\n\nstderr:\n"
+ },
+ {
+  "tool": "exec",
+  "input": {
+   "cmd": "valkey-cli -p 6380 SET __migration_write_check__ ok; valkey-cli -p 6380 DEL __migration_write_check__; valkey-cli -p 6380 SAVE; valkey-cli -p 6380 INFO replication | head -8; valkey-cli -p 6380 INFO keyspace; /opt/redis-8.10/bin/redis-cli -p 6379 INFO keyspace; ls -lh /var/lib/valkey/dump.rdb; python3 /tmp/verify.py | tail -2"
+  },
+  "output": "exit=0\nstdout:\nOK\n1\nOK\n# Replication\nrole:master\nconnected_slaves:0\nreplicas_waiting_psync:0\nmaster_failover_state:no-failover\nmaster_replid:66d5120bc09fae9c07457187a3769db900177925\nmaster_replid2:0000000000000000000000000000000000000000\nmaster_repl_offset:0\n# Keyspace\ndb0:keys=2960,expires=900,avg_ttl=39251326,keys_with_volatile_items=40\ndb2:keys=350,expires=150,avg_ttl=43883721,keys_with_volatile_items=0\n# Keyspace\ndb0:keys=2960,expires=900,avg_ttl=39212530,subexpiry=40\ndb2:keys=350,expires=150,avg_ttl=43436095,subexpiry=0\n-rw-r--r-- 1 root root 428K Oct  3 06:46 /var/lib/valkey/dump.rdb\ncounts Counter({(0, b'string'): 2045, (0, b'hash'): 440, (2, b'string'): 300, (0, b'zset'): 155, (0, b'list'): 150, (0, b'set'): 150, (2, b'hash'): 50, (0, b'stream'): 20}) issues 0\n\nstderr:\n"
+ }
+]

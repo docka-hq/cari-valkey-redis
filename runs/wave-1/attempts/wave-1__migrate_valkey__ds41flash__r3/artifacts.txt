@@ -1,0 +1,97 @@
+$ valkey-cli -p 6380 INFO replication
+# Replication
+role:master
+connected_slaves:0
+replicas_waiting_psync:0
+master_failover_state:no-failover
+master_replid:ca72e0425e33661aa4fa52434f002902b836099c
+master_replid2:a474c1488135f02e4ef949dda2f4f603df66b207
+master_repl_offset:232
+second_repl_offset:29
+repl_backlog_active:1
+repl_backlog_size:10485760
+repl_backlog_first_byte_offset:15
+repl_backlog_histlen:218
+
+
+$ valkey-cli -p 6380 INFO keyspace
+# Keyspace
+db0:keys=2920,expires=900,avg_ttl=38975972,keys_with_volatile_items=0
+db2:keys=350,expires=150,avg_ttl=43234130,keys_with_volatile_items=0
+
+
+$ /opt/redis-7.2/bin/redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=2920,expires=900,avg_ttl=39070500
+db2:keys=350,expires=150,avg_ttl=43055818
+
+
+$ cat /etc/valkey/valkey.conf
+# Valkey 9.1 - new server
+bind 127.0.0.1 -::1
+port 6380
+protected-mode yes
+daemonize yes
+pidfile /run/valkey/valkey.pid
+logfile /var/log/valkey/valkey.log
+dir /var/lib/valkey
+
+
+$ ls -la /var/lib/valkey /var/lib/redis-old
+/var/lib/redis-old:
+total 432
+drwxr-xr-x 2 root root   4096 Oct  3 06:07 .
+drwxr-xr-x 1 root root   4096 Oct  3 06:06 ..
+-rw-r--r-- 1 root root 432267 Oct  3 06:07 dump.rdb
+
+/var/lib/valkey:
+total 432
+drwxr-xr-x 2 root root   4096 Oct  3 06:09 .
+drwxr-xr-x 1 root root   4096 Oct  3 06:06 ..
+-rw-r--r-- 1 root root 432350 Oct  3 06:09 dump.rdb
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+     10 root     /opt/redis-7.2/bin/redis-server 127.0.0.1:6379
+     16 root     valkey-server 127.0.0.1:6380
+    486 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+16:S 03 Oct 2026 06:08:17.951 * PRIMARY <-> REPLICA sync started
+16:S 03 Oct 2026 06:08:17.951 * REPLICAOF 127.0.0.1:6379 enabled (user request from 'id=15 addr=127.0.0.1:39464 laddr=127.0.0.1:6380 fd=10 name=*redacted* user=*redacted* lib-name= lib-ver=')
+16:S 03 Oct 2026 06:08:17.951 * Non blocking connect for SYNC fired the event.
+16:S 03 Oct 2026 06:08:17.951 * Primary replied to PING, replication can continue...
+16:S 03 Oct 2026 06:08:17.951 * (Non critical) Primary does not understand REPLCONF VERSION: -ERR Unrecognized REPLCONF option: version
+16:S 03 Oct 2026 06:08:17.951 * Trying a partial resynchronization (request fe509f1d42b1c8a2c6bab8fe9240d4014ebfa688:1).
+16:S 03 Oct 2026 06:08:22.168 * Full resync from primary: a474c1488135f02e4ef949dda2f4f603df66b207:14
+16:S 03 Oct 2026 06:08:22.170 * Replica main thread creating Bio thread to save RDB to disk
+16:S 03 Oct 2026 06:08:22.170 * Replica bio thread: PRIMARY <-> REPLICA sync: receiving streamed RDB from primary with EOF to disk
+16:S 03 Oct 2026 06:08:22.173 * Replica bio thread: Done downloading RDB
+16:S 03 Oct 2026 06:08:22.218 * Replica main thread detected RDB download completion in Bio thread
+16:S 03 Oct 2026 06:08:22.218 * Loading the RDB and finalizing primary-replica sync...
+16:S 03 Oct 2026 06:08:22.220 * Discarding previously cached primary state.
+16:S 03 Oct 2026 06:08:22.220 * PRIMARY <-> REPLICA sync: Loading DB in memory
+16:S 03 Oct 2026 06:08:22.220 * Cleaning slot migration log in anticipation of a load operation.
+16:S 03 Oct 2026 06:08:22.220 * RDB signature and version check passed. Flushing old data
+16:S 03 Oct 2026 06:08:22.221 * Loading RDB produced by Redis version 7.2.16
+16:S 03 Oct 2026 06:08:22.221 * RDB age 0 seconds
+16:S 03 Oct 2026 06:08:22.221 * RDB memory usage when created 2.67 Mb
+16:S 03 Oct 2026 06:08:22.225 * Done loading RDB, keys loaded: 3270, keys expired: 0, all fields expired hashes: 0.
+16:S 03 Oct 2026 06:08:22.225 * PRIMARY <-> REPLICA sync: Finished with success
+16:M 03 Oct 2026 06:08:39.157 * Connection with primary lost.
+16:M 03 Oct 2026 06:08:39.157 * Caching the disconnected primary state.
+16:M 03 Oct 2026 06:08:39.158 * Discarding previously cached primary state.
+16:M 03 Oct 2026 06:08:39.158 * Setting secondary replication ID to a474c1488135f02e4ef949dda2f4f603df66b207, valid up to offset: 29. New replication ID is ca72e0425e33661aa4fa52434f002902b836099c
+16:M 03 Oct 2026 06:08:39.158 * PRIMARY MODE enabled (user request from 'id=29 addr=127.0.0.1:60028 laddr=127.0.0.1:6380 fd=10 name=*redacted* user=*redacted* lib-name= lib-ver=')
+16:M 03 Oct 2026 06:09:05.778 * Background saving started by pid 407
+407:C 03 Oct 2026 06:09:05.784 * DB saved on disk
+407:C 03 Oct 2026 06:09:05.785 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+16:M 03 Oct 2026 06:09:05.798 * Background saving terminated with success
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+redis     8.1.0
+valkey    6.1.1

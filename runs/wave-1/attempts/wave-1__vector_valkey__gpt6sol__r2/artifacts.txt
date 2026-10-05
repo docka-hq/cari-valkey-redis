@@ -1,0 +1,99 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Return the five nearest knowledge-base article IDs using Valkey vector search."""
+import json
+import math
+import struct
+import sys
+
+import valkey
+
+
+def main():
+    vector = json.load(sys.stdin)
+    if not isinstance(vector, list) or len(vector) != 64 or any(
+        not isinstance(x, (float, int)) or isinstance(x, bool) or not math.isfinite(x)
+        for x in vector
+    ):
+        raise ValueError('query must be a JSON list of 64 finite numbers')
+    blob = struct.pack('<64f', *vector)
+    client = valkey.Valkey(host='127.0.0.1', port=6379, decode_responses=False)
+    result = client.execute_command(
+        'FT.SEARCH', 'articles_idx', '*=>[KNN 5 @embedding $vec AS distance]',
+        'PARAMS', 2, 'vec', blob,
+        'LIMIT', 0, 5, 'NOCONTENT', 'DIALECT', 2,
+    )
+    for key in result[1:]:
+        print(key.decode('utf-8').removeprefix('article:'))
+
+
+if __name__ == '__main__':
+    main()
+
+
+$ ls -la /app
+total 16
+drwxr-xr-x 1 root root 4096 Oct  3 05:18 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:17 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root  931 Oct  3 05:18 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+articles_idx
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    230 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_periods Flags:2
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_time Flags:2
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_upserts Flags:2
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_periods Flags:2
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_time Flags:2
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: cancel-timeouts Flags:6
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_deferred_entry_cnt Flags:1
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+9:M 03 Oct 2026 05:17:52.971 # <search> [warning], tid: 128045210556224, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+9:M 03 Oct 2026 05:17:52.971 # <search> [notice], tid: 128045210556224, /vmsdk/src/module.cc:148: search module was successfully loaded!
+9:M 03 Oct 2026 05:17:52.971 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+9:M 03 Oct 2026 05:17:52.971 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+9:M 03 Oct 2026 05:17:52.971 * <bf> Created new data type 'bloomfltr'
+9:M 03 Oct 2026 05:17:52.972 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+9:M 03 Oct 2026 05:17:52.972 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+9:M 03 Oct 2026 05:17:52.973 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+9:M 03 Oct 2026 05:17:52.973 * Static Module 'lua' successfully loaded
+9:M 03 Oct 2026 05:17:52.973 * Server initialized
+9:M 03 Oct 2026 05:17:52.973 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:18:16.024 # <search> [notice], tid: 128045210556224, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 0)
+9:M 03 Oct 2026 05:18:19.223 # <search> [notice], tid: 128045210556224, /src/rdb_serialization.cc:260: Saving 1 ValkeySearch RDB sections with minimum version 1.0.0
+9:M 03 Oct 2026 05:18:19.223 * <search> Saving aux metadata for SchemaManager to aux RDB
+9:M 03 Oct 2026 05:18:19.223 # <module> [notice], tid: 128045210556224, /src/index_schema.cc:1240: Starting RDB save for index schema: *redacted* Saving in version 2 format
+9:M 03 Oct 2026 05:18:19.223 # <module> [notice], tid: 128045210556224, /src/index_schema.cc:1268: Starting to save 1 attributes.
+9:M 03 Oct 2026 05:18:19.226 # <module> [notice], tid: 128045210556224, /src/index_schema.cc:1410: Writing Index Extension, keys = 1000
+9:M 03 Oct 2026 05:18:19.226 # <module> [notice], tid: 128045210556224, /src/index_schema.cc:1428: Writing mutation queue records = 0 Total queue:0
+9:M 03 Oct 2026 05:18:19.228 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

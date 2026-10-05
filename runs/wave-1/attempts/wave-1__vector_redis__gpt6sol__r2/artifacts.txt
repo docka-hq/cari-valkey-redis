@@ -1,0 +1,102 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Print the five nearest knowledge-base IDs using Redis cosine vector search."""
+import json
+import math
+import struct
+import sys
+
+import redis
+
+
+def main():
+    embedding = json.load(sys.stdin)
+    if (not isinstance(embedding, list) or len(embedding) != 64
+            or any(isinstance(x, bool) or not isinstance(x, (float, int))
+                   or not math.isfinite(x) for x in embedding)):
+        raise ValueError('Expected a JSON list of 64 finite numbers')
+
+    vector = struct.pack('<64d', *embedding)
+    client = redis.Redis(host='127.0.0.1', port=6379)
+    result = client.execute_command(
+        'FT.SEARCH', 'idx:kb:articles',
+        '*=>[KNN 5 @embedding $query AS distance]',
+        'PARAMS', 2, 'query', vector,
+        'SORTBY', 'distance', 'ASC', 'RETURN', 1, 'id',
+        'LIMIT', 0, 5, 'DIALECT', 2,
+    )
+    # Redis 8 RESP2 returns a map containing the ordered result documents.
+    for document in result[b'results']:
+        print(document[b'extra_attributes'][b'id'].decode('utf-8'))
+
+
+if __name__ == '__main__':
+    main()
+
+
+$ ls -la /app
+total 16
+drwxr-xr-x 1 root root 4096 Oct  3 05:17 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:17 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1081 Oct  3 05:17 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+idx:kb:articles
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     redis-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    212 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+9:M 03 Oct 2026 05:17:14.218 * <timeseries> RedisTimeSeries version 81001, git_sha=
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> Registering configuration options: [
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-compaction-policy   :              }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-num-threads         :            3 }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-retention-policy    :            0 }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-duplicate-policy    :        block }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-encoding            :   compressed }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> 	{ ts-topology-events     :         true }
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> ]
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> Detected redis oss (cluster-enabled=no)
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> Subscribe to ASM events
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> Subscribe to topology changes events
+9:M 03 Oct 2026 05:17:14.219 * <timeseries> Enabled diskless replication
+9:M 03 Oct 2026 05:17:14.219 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+9:M 03 Oct 2026 05:17:14.219 * Server initialized
+9:M 03 Oct 2026 05:17:14.219 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:17:14.219 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+9:M 03 Oct 2026 05:17:36.186 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 541224B
+9:M 03 Oct 2026 05:17:36.186 * <search> Successfully created index idx:kb:articles
+9:M 03 Oct 2026 05:17:36.206 * <search> DocTable capacity increase from 1000 to 1501
+9:M 03 Oct 2026 05:17:45.878 * Background saving started by pid 129
+129:C 03 Oct 2026 05:17:45.885 * BGSAVE done, 1000 keys saved, 0 keys skipped, 607545 bytes written.
+129:C 03 Oct 2026 05:17:45.887 * DB saved on disk
+129:C 03 Oct 2026 05:17:45.888 * Fork CoW for RDB: current 1 MB, peak 1 MB, average 1 MB
+9:M 03 Oct 2026 05:17:45.908 * Background saving terminated with success
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

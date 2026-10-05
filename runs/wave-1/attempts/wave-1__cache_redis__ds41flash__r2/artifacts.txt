@@ -1,0 +1,230 @@
+$ cat /app/catalog.py
+"""Product catalog used by the storefront.
+
+get_product(product_id) -> dict    {"id": int, "name": str, "price": float, "currency": str}
+update_price(product_id, price)    changes the price in the inventory service
+
+Products are cached in Redis (127.0.0.1:6379) so that a product read recently is
+served from the shared cache instead of hitting the slow inventory service again.
+Every storefront process uses the same keys, so the cache is shared; entries
+expire after 5 minutes.  update_price() invalidates the entry for the product it
+changed, so the next get_product() call - in any process - reads the new price.
+"""
+import json
+import time
+import urllib.request
+import uuid
+
+import redis
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+
+REDIS_HOST = "127.0.0.1"
+REDIS_PORT = 6379
+REDIS_DB = 0
+
+CACHE_TTL_SECONDS = 300  # cached products expire after 5 minutes
+CACHE_KEY_PREFIX = "catalog:product:"  # shared by every storefront process
+LOCK_KEY_PREFIX = "catalog:lock:product:"
+LOCK_TTL_MS = 3000  # safety net if a process dies while holding the lock
+LOCK_WAIT_SECONDS = 3.0
+LOCK_RETRY_SECONDS = 0.02
+
+# Release the lock only if we still own it (compare-and-delete).
+_RELEASE_LOCK = (
+    "if redis.call('get', KEYS[1]) == ARGV[1] "
+    "then return redis.call('del', KEYS[1]) else return 0 end"
+)
+
+_client = None
+
+
+def _redis() -> "redis.Redis":
+    """Return the process-wide Redis client (one connection pool per process)."""
+    global _client
+    if _client is None:
+        _client = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            db=REDIS_DB,
+            decode_responses=True,
+            socket_connect_timeout=0.5,
+            socket_timeout=0.5,
+            health_check_interval=30,
+        )
+    return _client
+
+
+def _cache_key(product_id: int) -> str:
+    return f"{CACHE_KEY_PREFIX}{product_id}"
+
+
+def _lock_key(product_id: int) -> str:
+    return f"{LOCK_KEY_PREFIX}{product_id}"
+
+
+def _acquire_lock(client, key: str, token: str) -> bool:
+    """Best-effort mutual exclusion for filling/invalidating one product entry."""
+    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    while True:
+        try:
+            if client.set(key, token, nx=True, px=LOCK_TTL_MS):
+                return True
+        except (redis.RedisError, OSError):
+            return False
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(LOCK_RETRY_SECONDS)
+
+
+def _release_lock(client, key: str, token: str) -> None:
+    try:
+        client.eval(_RELEASE_LOCK, 1, key, token)
+    except (redis.RedisError, OSError):
+        pass
+
+
+def _fetch_product(product_id: int) -> dict:
+    """Read the product from the inventory service (the slow upstream)."""
+    with urllib.request.urlopen(
+        f"{INVENTORY_URL}/products/{int(product_id)}", timeout=10
+    ) as resp:
+        return json.load(resp)
+
+
+def get_product(product_id: int) -> dict:
+    product_id = int(product_id)
+    key = _cache_key(product_id)
+
+    # 1. Try the shared cache first.  If Redis is unavailable, degrade to the
+    #    inventory service instead of failing the storefront.
+    client = None
+    try:
+        client = _redis()
+        cached = client.get(key)
+        if cached is not None:
+            return json.loads(cached)
+    except (redis.RedisError, OSError):
+        client = None
+
+    if client is None:
+        return _fetch_product(product_id)
+
+    # 2. Cache miss: fill it while holding a per-product lock, so concurrent
+    #    readers don't stampede the inventory service and an in-flight
+    #    update_price() cannot be overwritten with a stale value.
+    lock_key = _lock_key(product_id)
+    token = uuid.uuid4().hex
+    locked = _acquire_lock(client, lock_key, token)
+    try:
+        if locked:
+            try:
+                cached = client.get(key)  # someone may have filled it meanwhile
+                if cached is not None:
+                    return json.loads(cached)
+            except (redis.RedisError, OSError):
+                pass
+        product = _fetch_product(product_id)  # errors propagate, nothing cached
+        if locked:
+            # Store before releasing the lock, so no other process can slip in
+            # and re-fetch the product in the gap.
+            try:
+                client.set(key, json.dumps(product), ex=CACHE_TTL_SECONDS)
+            except (redis.RedisError, OSError):
+                pass
+        return product
+    finally:
+        if locked:
+            _release_lock(client, lock_key, token)
+
+
+def update_price(product_id: int, price: float) -> None:
+    product_id = int(product_id)
+
+    # Take the product lock so the change and the cache invalidation are
+    # atomic with respect to readers filling the entry.
+    client = None
+    locked = False
+    lock_key = _lock_key(product_id)
+    token = uuid.uuid4().hex
+    try:
+        client = _redis()
+        locked = _acquire_lock(client, lock_key, token)
+    except (redis.RedisError, OSError):
+        client = None
+
+    try:
+        body = json.dumps({"price": price}).encode()
+        req = urllib.request.Request(
+            f"{INVENTORY_URL}/products/{int(product_id)}",
+            data=body,
+            method="PUT",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+
+        # Drop the cached entry so every process sees the new price next read.
+        if client is not None:
+            try:
+                client.delete(_cache_key(product_id))
+            except (redis.RedisError, OSError):
+                pass
+    finally:
+        if locked:
+            _release_lock(client, lock_key, token)
+
+
+$ ls -la /app
+total 24
+drwxr-xr-x 1 root root 4096 Oct  3 05:45 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:39 ..
+drwxr-xr-x 2 root root 4096 Oct  3 05:47 __pycache__
+-rw-r--r-- 1 root root 5677 Oct  3 05:47 catalog.py
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     redis-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    687 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+9:M 03 Oct 2026 05:39:00.913 * <timeseries> Subscribe to topology changes events
+9:M 03 Oct 2026 05:39:00.913 * <timeseries> Enabled diskless replication
+9:M 03 Oct 2026 05:39:00.913 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+9:M 03 Oct 2026 05:39:00.914 * Server initialized
+9:M 03 Oct 2026 05:39:00.914 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:39:00.914 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+9:M 03 Oct 2026 05:45:24.350 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:45:24.351 * DB saved on disk
+9:M 03 Oct 2026 05:45:44.579 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:45:44.580 * DB saved on disk
+9:M 03 Oct 2026 05:46:47.717 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:46:47.719 * DB saved on disk
+9:M 03 Oct 2026 05:47:10.442 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:47:10.444 * DB saved on disk
+9:M 03 Oct 2026 05:47:13.233 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:47:13.234 * DB saved on disk
+9:M 03 Oct 2026 05:47:15.855 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:47:15.856 * DB saved on disk
+9:M 03 Oct 2026 05:47:40.327 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:47:40.329 * DB saved on disk
+9:M 03 Oct 2026 05:47:42.620 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:47:42.622 * DB saved on disk
+9:M 03 Oct 2026 05:48:00.346 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:48:00.348 * DB saved on disk
+9:M 03 Oct 2026 05:48:20.839 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:48:20.841 * DB saved on disk
+9:M 03 Oct 2026 05:48:46.279 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:48:46.280 * DB saved on disk
+9:M 03 Oct 2026 05:49:01.578 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+9:M 03 Oct 2026 05:49:01.580 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

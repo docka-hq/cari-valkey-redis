@@ -1,0 +1,152 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the knowledge-base article vectors stored in Redis.
+
+Usage:
+    python3 /app/search.py < query.json
+
+query.json must contain a single query embedding: a JSON list of floats
+(e.g. [0.01, -0.2, ...]). The 5 most similar article ids are printed to
+stdout, one per line, most similar first.
+
+The similarity search runs entirely inside Redis (VSIM over the vector set
+`articles:vset`): this script never reads /data/articles.jsonl and never
+computes similarities itself.
+"""
+import json
+import sys
+
+import redis
+
+VSET_KEY = "articles:vset"
+TOP_K = 5
+
+
+def read_query() -> list[float]:
+    raw = sys.stdin.read().strip()
+    if not raw:
+        raise SystemExit("error: empty query on stdin")
+    try:
+        query = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"error: invalid JSON query: {exc}")
+
+    # Tolerate an object form such as {"embedding": [...]} / {"vector": [...]}.
+    if isinstance(query, dict):
+        for field in ("embedding", "vector", "query"):
+            if field in query:
+                query = query[field]
+                break
+    if not isinstance(query, (list, tuple)):
+        raise SystemExit("error: query must be a JSON list of floats")
+    try:
+        return [float(x) for x in query]
+    except (TypeError, ValueError):
+        raise SystemExit("error: query must contain only numbers")
+
+
+def main() -> int:
+    query = read_query()
+
+    r = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
+    dim = int(r.execute_command("VDIM", VSET_KEY))
+    if len(query) != dim:
+        raise SystemExit(f"error: query has {len(query)} dims, index expects {dim}")
+
+    # VSIM ... VALUES <dim> <v1..vN> COUNT 5 WITHSCORES TRUTH
+    # TRUTH forces an exact (non-approximate) search over the vector set, so the
+    # ranking is exact for this collection size.
+    result = r.execute_command(
+        "VSIM", VSET_KEY, "VALUES", str(dim),
+        *[repr(v) for v in query],
+        "COUNT", str(TOP_K), "WITHSCORES", "TRUTH",
+    )
+
+    # redis-py may return the reply as a flat [id, score, id, score, ...] list
+    # or as a mapping id -> score, depending on RESP version.
+    if isinstance(result, dict):
+        scored = [(str(k), float(v)) for k, v in result.items()]
+    elif result and isinstance(result[0], dict):
+        scored = [(str(k), float(v)) for k, v in result[0].items()]
+    else:
+        scored = [(str(result[i]), float(result[i + 1])) for i in range(0, len(result), 2)]
+
+    scored.sort(key=lambda kv: kv[1], reverse=True)
+    out = [article_id for article_id, _ in scored[:TOP_K]]
+    sys.stdout.write("\n".join(out) + ("\n" if out else ""))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 06:05 .
+drwxr-xr-x 1 root root 4096 Oct  3 06:02 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 2000 Oct  3 06:04 load_articles.py
+-rw-r--r-- 1 root root 2752 Oct  3 06:04 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=2,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+2
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     [redis-server] <defunct>
+     10 root     python3 /opt/upstream/server.py
+  12508 root     [dpkg-preconfigu] <defunct>
+  12617 root     redis-server 127.0.0.1:6379
+  13165 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-num-threads         :            3 }
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-retention-policy    :            0 }
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-duplicate-policy    :        block }
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-encoding            :   compressed }
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+12617:M 03 Oct 2026 06:05:31.473 * <timeseries> 	{ ts-topology-events     :         true }
+12617:M 03 Oct 2026 06:05:31.474 * <timeseries> ]
+12617:M 03 Oct 2026 06:05:31.474 * <timeseries> Detected redis oss (cluster-enabled=no)
+12617:M 03 Oct 2026 06:05:31.474 * <timeseries> Subscribe to ASM events
+12617:M 03 Oct 2026 06:05:31.474 * <timeseries> Subscribe to topology changes events
+12617:M 03 Oct 2026 06:05:31.474 * <timeseries> Enabled diskless replication
+12617:M 03 Oct 2026 06:05:31.474 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+12617:M 03 Oct 2026 06:05:31.474 * Server initialized
+12617:M 03 Oct 2026 06:05:31.474 * <search> LOAD start source=RDB_FILE sst=false disk=rebuild-from-keyspace
+12617:M 03 Oct 2026 06:05:31.474 * Loading RDB produced by version 8.10.2
+12617:M 03 Oct 2026 06:05:31.474 * RDB age 1 seconds
+12617:M 03 Oct 2026 06:05:31.474 * RDB memory usage when created 2.75 Mb
+12617:M 03 Oct 2026 06:05:31.479 * Done loading RDB, keys loaded: 2, keys expired: 0.
+12617:M 03 Oct 2026 06:05:31.479 * <search> LOAD end disk=rebuild-from-keyspace ok=true
+12617:M 03 Oct 2026 06:05:31.479 * DB loaded from disk: 0.005 seconds
+12617:M 03 Oct 2026 06:05:31.479 * Ready to accept connections tcp
+12617:M 03 Oct 2026 06:05:31.479 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+12617:M 03 Oct 2026 06:06:11.383 * Background saving started by pid 13088
+13088:C 03 Oct 2026 06:06:11.390 * BGSAVE done, 2 keys saved, 0 keys skipped, 427296 bytes written.
+13088:C 03 Oct 2026 06:06:11.391 * DB saved on disk
+13088:C 03 Oct 2026 06:06:11.392 * Fork CoW for RDB: current 1 MB, peak 1 MB, average 0 MB
+12617:M 03 Oct 2026 06:06:11.419 * Background saving terminated with success
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

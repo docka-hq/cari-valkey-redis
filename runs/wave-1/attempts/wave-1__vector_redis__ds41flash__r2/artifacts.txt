@@ -1,0 +1,123 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the knowledge-base articles stored in Redis.
+
+Usage:  python3 /app/search.py < query.json
+
+Reads a single query embedding (JSON list of 64 floats) from stdin at most once,
+then asks Redis (via the vector-set VSIM command) for the 5 most similar
+articles by cosine similarity and prints their ids, most similar first.
+
+All stored vectors and similarity computation live inside Redis; this script
+never reads /data/articles.jsonl and never computes similarities itself.
+"""
+import json
+import sys
+
+import redis
+
+VSET_KEY = "articles:vset"
+TOP_K = 5
+
+
+def read_query_vector():
+    data = sys.stdin.read().strip()
+    if not data:
+        sys.exit("no query embedding on stdin")
+    vec = json.loads(data)
+    # Tolerate either a bare list or a single-element list of lists.
+    if vec and isinstance(vec[0], list):
+        vec = vec[0]
+    if not isinstance(vec, list) or not vec:
+        sys.exit("query embedding must be a non-empty JSON list of floats")
+    return [float(x) for x in vec]
+
+
+def main():
+    vector = read_query_vector()
+
+    r = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
+
+    # VSIM runs the similarity search inside Redis; default metric is cosine.
+    result = r.execute_command(
+        "VSIM", VSET_KEY, "VALUES", len(vector),
+        *[repr(x) for x in vector],
+        "COUNT", TOP_K,
+    )
+
+    for elem in result[:TOP_K]:
+        print(elem)
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:50 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:49 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1032 Oct  3 05:50 load_articles.py
+-rwxr-xr-x 1 root root 1475 Oct  3 05:50 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=2,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+2
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     [redis-server] <defunct>
+     10 root     python3 /opt/upstream/server.py
+    264 root     /usr/local/bin/redis-server 127.0.0.1:6379
+    409 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> Registering configuration options: [
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-compaction-policy   :              }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-num-threads         :            3 }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-retention-policy    :            0 }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-duplicate-policy    :        block }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-encoding            :   compressed }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> 	{ ts-topology-events     :         true }
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> ]
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> Detected redis oss (cluster-enabled=no)
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> Subscribe to ASM events
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> Subscribe to topology changes events
+264:M 03 Oct 2026 05:50:59.172 * <timeseries> Enabled diskless replication
+264:M 03 Oct 2026 05:50:59.172 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+264:M 03 Oct 2026 05:50:59.173 * Server initialized
+264:M 03 Oct 2026 05:50:59.173 * <search> LOAD start source=RDB_FILE sst=false disk=rebuild-from-keyspace
+264:M 03 Oct 2026 05:50:59.173 * Loading RDB produced by version 8.10.2
+264:M 03 Oct 2026 05:50:59.173 * RDB age 20 seconds
+264:M 03 Oct 2026 05:50:59.173 * RDB memory usage when created 3.54 Mb
+264:M 03 Oct 2026 05:50:59.176 * <search> Draining workers thread pool with threshold 100
+264:M 03 Oct 2026 05:50:59.181 * Done loading RDB, keys loaded: 2, keys expired: 0.
+264:M 03 Oct 2026 05:50:59.181 * <search> LOAD end disk=rebuild-from-keyspace ok=true
+264:M 03 Oct 2026 05:50:59.181 * DB loaded from disk: 0.009 seconds
+264:M 03 Oct 2026 05:50:59.181 * Ready to accept connections tcp
+264:M 03 Oct 2026 05:50:59.181 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+264:M 03 Oct 2026 05:51:09.078 * BGSAVE done, 2 keys saved, 0 keys skipped, 1049425 bytes written.
+264:M 03 Oct 2026 05:51:09.081 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

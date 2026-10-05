@@ -1,0 +1,159 @@
+$ cat /app/catalog.py
+"""Product catalog used by the storefront.
+
+get_product(product_id) -> dict    {"id": int, "name": str, "price": float, "currency": str}
+update_price(product_id, price)    changes the price in the inventory service
+
+Reads go through a shared cache in Valkey (127.0.0.1:6379), so products read
+recently by ANY storefront process are served from Valkey instead of the slow
+inventory service. Each product is stored under the key "catalog:product:<id>"
+as its JSON representation and expires after CACHE_TTL_SECONDS (5 minutes).
+
+update_price() writes through to the inventory service and then deletes the
+cached entry, so the next get_product() in any process reloads the product with
+its new price and re-caches it.
+
+When several processes miss the same key at the same time, the first one claims
+the population (SET NX marker) and fetches upstream once; the others wait for
+the key to appear, so a cold start costs one upstream read per product.
+"""
+import json
+import time
+import urllib.request
+
+import valkey
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+
+VALKEY_HOST = "127.0.0.1"
+VALKEY_PORT = 6379
+CACHE_TTL_SECONDS = 300  # cached products expire after 5 minutes
+POPULATION_LOCK_TTL = 3  # safety bound for the "someone else is fetching" marker
+_WAIT_FOR_POPULATION = 2.0  # seconds to wait for another process's fetch before fetching ourselves
+_POPULATING = "-"  # placeholder value while a product is being fetched
+
+_client_instance = None
+
+
+def _key(product_id: int) -> str:
+    return f"catalog:product:{int(product_id)}"
+
+
+def _cache() -> "valkey.client.Valkey":
+    global _client_instance
+    if _client_instance is None:
+        # decode_responses=True so cached products come back as str, ready for json.loads
+        _client_instance = valkey.Valkey(host=VALKEY_HOST, port=VALKEY_PORT,
+                                         decode_responses=True,
+                                         socket_timeout=2, socket_connect_timeout=2)
+    return _client_instance
+
+
+def _fetch_product(product_id: int) -> dict:
+    with urllib.request.urlopen(f"{INVENTORY_URL}/products/{int(product_id)}", timeout=10) as resp:
+        product = json.load(resp)
+    try:
+        # Authoritative read: store it, refreshing the 5-minute expiry.
+        _cache().set(_key(product_id), json.dumps(product), ex=CACHE_TTL_SECONDS)
+    except Exception:
+        pass  # a cache outage must not make reads fail
+    return product
+
+
+def get_product(product_id: int) -> dict:
+    key = _key(product_id)
+    try:
+        cached = _cache().get(key)
+        if cached is not None and cached != _POPULATING:
+            return json.loads(cached)
+        # Miss: claim the right to fetch so concurrent misses cause one upstream read.
+        claimed = _cache().set(key, _POPULATING, ex=POPULATION_LOCK_TTL, nx=True)
+    except Exception:
+        claimed = True  # no usable cache: just read from the inventory service
+    if claimed:
+        return _fetch_product(product_id)
+    # Another process is fetching this product; wait for it to appear in the cache.
+    deadline = time.monotonic() + _WAIT_FOR_POPULATION
+    while time.monotonic() < deadline:
+        time.sleep(0.02)
+        try:
+            cached = _cache().get(key)
+        except Exception:
+            cached = None
+        if cached is not None and cached != _POPULATING:
+            return json.loads(cached)
+    return _fetch_product(product_id)  # populator died or cache vanished: fetch ourselves
+
+
+def update_price(product_id: int, price: float) -> None:
+    body = json.dumps({"price": price}).encode()
+    req = urllib.request.Request(
+        f"{INVENTORY_URL}/products/{int(product_id)}",
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+    # The cached copy is now stale: drop it so the next get_product() in any
+    # process reloads the new price and re-caches it (bounded anyway by the
+    # 5-minute TTL). If Valkey is unreachable, the entry expires on its own.
+    try:
+        _cache().delete(_key(product_id))
+    except Exception:
+        pass
+
+
+$ ls -la /app
+total 24
+drwxr-xr-x 1 root root 4096 Oct  3 07:13 .
+drwxr-xr-x 1 root root 4096 Oct  3 06:54 ..
+drwxr-xr-x 2 root root 4096 Oct  3 07:15 __pycache__
+-rw-r--r-- 1 root root 4139 Oct  3 07:15 catalog.py
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    523 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_deletes Flags:2
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_queries Flags:2
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_periods Flags:2
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_read_time Flags:2
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_upserts Flags:2
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_periods Flags:2
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: time_slice_write_time Flags:2
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: cancel-timeouts Flags:6
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_deferred_entry_cnt Flags:1
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+9:M 03 Oct 2026 06:54:41.591 # <search> [warning], tid: 133367481947968, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+9:M 03 Oct 2026 06:54:41.591 # <search> [notice], tid: 133367481947968, /vmsdk/src/module.cc:148: search module was successfully loaded!
+9:M 03 Oct 2026 06:54:41.591 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+9:M 03 Oct 2026 06:54:41.591 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+9:M 03 Oct 2026 06:54:41.591 * <bf> Created new data type 'bloomfltr'
+9:M 03 Oct 2026 06:54:41.591 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+9:M 03 Oct 2026 06:54:41.592 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+9:M 03 Oct 2026 06:54:41.593 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+9:M 03 Oct 2026 06:54:41.593 * Static Module 'lua' successfully loaded
+9:M 03 Oct 2026 06:54:41.594 * Server initialized
+9:M 03 Oct 2026 06:54:41.594 * Ready to accept connections tcp
+9:M 03 Oct 2026 07:15:44.464 * 100 changes in 300 seconds. Saving...
+9:M 03 Oct 2026 07:15:44.465 * Background saving started by pid 421
+421:C 03 Oct 2026 07:15:44.469 * DB saved on disk
+421:C 03 Oct 2026 07:15:44.471 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+9:M 03 Oct 2026 07:15:44.566 * Background saving terminated with success
+9:M 03 Oct 2026 07:16:35.587 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

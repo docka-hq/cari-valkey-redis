@@ -1,0 +1,79 @@
+$ cat /app/search.py
+import json, struct, sys, redis
+q = json.load(sys.stdin)
+if len(q) != 64: sys.exit("query must have 64 floats")
+r = redis.Redis(host='127.0.0.1', port=6379, decode_responses=False, protocol=2)
+res = r.execute_command('FT.SEARCH', 'idx:articles', '*=>[KNN 5 @embedding $v AS score]',
+    'PARAMS', '2', 'v', struct.pack('<64f', *q),
+    'SORTBY', 'score', 'ASC', 'RETURN', '2', 'id', 'score', 'LIMIT', '0', '5', 'DIALECT', '2')
+for i in range(1, len(res), 2):
+    f = dict(zip(res[i+1][::2], res[i+1][1::2]))
+    print(f[b'id'].decode())
+
+
+$ ls -la /app
+total 16
+drwxr-xr-x 1 root root 4096 Oct  3 05:13 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:12 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root  537 Oct  3 05:13 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+idx:articles
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     redis-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    317 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+9:M 03 Oct 2026 05:12:55.458 * <bf> 	{ cf-max-expansions   :        32 }
+9:M 03 Oct 2026 05:12:55.458 * <bf> ]
+9:M 03 Oct 2026 05:12:55.459 * Module 'bf' loaded from /usr/local/lib/redis/modules/redisbloom.so
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> RedisTimeSeries version 81001, git_sha=
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> Registering configuration options: [
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-compaction-policy   :              }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-num-threads         :            3 }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-retention-policy    :            0 }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-duplicate-policy    :        block }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-encoding            :   compressed }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> 	{ ts-topology-events     :         true }
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> ]
+9:M 03 Oct 2026 05:12:55.459 * <timeseries> Detected redis oss (cluster-enabled=no)
+9:M 03 Oct 2026 05:12:55.460 * <timeseries> Subscribe to ASM events
+9:M 03 Oct 2026 05:12:55.460 * <timeseries> Subscribe to topology changes events
+9:M 03 Oct 2026 05:12:55.460 * <timeseries> Enabled diskless replication
+9:M 03 Oct 2026 05:12:55.460 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+9:M 03 Oct 2026 05:12:55.460 * Server initialized
+9:M 03 Oct 2026 05:12:55.460 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:12:55.460 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+9:M 03 Oct 2026 05:13:18.818 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 279080B
+9:M 03 Oct 2026 05:13:18.818 * <search> Successfully created index idx:articles
+9:M 03 Oct 2026 05:13:18.838 * <search> DocTable capacity increase from 1000 to 1501
+9:M 03 Oct 2026 05:13:53.680 * BGSAVE done, 1000 keys saved, 0 keys skipped, 348539 bytes written.
+9:M 03 Oct 2026 05:13:53.682 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

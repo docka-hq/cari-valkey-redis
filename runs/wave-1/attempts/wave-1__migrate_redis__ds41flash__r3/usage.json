@@ -1,0 +1,167 @@
+[
+ {
+  "in": 653,
+  "out": 129,
+  "reasoning": 0,
+  "cached": 640,
+  "cost": 8.3613e-05,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1213,
+  "out": 170,
+  "reasoning": 7,
+  "cached": 640,
+  "cost": 0.000185697,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2057,
+  "out": 891,
+  "reasoning": 632,
+  "cached": 1152,
+  "cost": 0.0006463722,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2901,
+  "out": 121,
+  "reasoning": 22,
+  "cached": 2048,
+  "cost": 0.0002173938,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5362,
+  "out": 1741,
+  "reasoning": 1540,
+  "cached": 2816,
+  "cost": 0.0013806156,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6478,
+  "out": 1389,
+  "reasoning": 1065,
+  "cached": 5248,
+  "cost": 0.0010308228,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7980,
+  "out": 2542,
+  "reasoning": 2257,
+  "cached": 6400,
+  "cost": 0.001746708,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8727,
+  "out": 277,
+  "reasoning": 123,
+  "cached": 7936,
+  "cost": 0.0003796566,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9348,
+  "out": 186,
+  "reasoning": 20,
+  "cached": 8704,
+  "cost": 0.0003184344,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9681,
+  "out": 611,
+  "reasoning": 145,
+  "cached": 9344,
+  "cost": 0.0005238714,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 10315,
+  "out": 387,
+  "reasoning": 162,
+  "cached": 9600,
+  "cost": 0.000454443,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 10617,
+  "out": 377,
+  "reasoning": 240,
+  "cached": 10240,
+  "cost": 0.000410169,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 10872,
+  "out": 541,
+  "reasoning": 68,
+  "cached": 10496,
+  "cost": 0.0005061336,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11660,
+  "out": 371,
+  "reasoning": 157,
+  "cached": 10752,
+  "cost": 0.0004888752,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11988,
+  "out": 629,
+  "reasoning": 115,
+  "cached": 11648,
+  "cost": 0.0005669328,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "AtlasCloud",
+  "stop": "stop"
+ }
+]

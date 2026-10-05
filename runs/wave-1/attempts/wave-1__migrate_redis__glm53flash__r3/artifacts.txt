@@ -1,0 +1,101 @@
+$ redis-cli -p 6380 INFO replication
+# Replication
+role:master
+connected_slaves:0
+master_failover_state:no-failover
+master_replid:e737fe8fc3a14380585188085dc83509a9fee1d9
+master_replid2:c570ef30e579de05052055956aa10570d71b16d4
+master_repl_offset:490
+second_repl_offset:267
+repl_backlog_active:1
+repl_backlog_size:1048576
+repl_backlog_first_byte_offset:15
+repl_backlog_histlen:476
+
+
+$ redis-cli -p 6380 INFO keyspace
+# Keyspace
+db0:keys=2920,expires=900,avg_ttl=38744715,subexpiry=0
+db2:keys=350,expires=150,avg_ttl=41878236,subexpiry=0
+
+
+$ /opt/redis-7.2/bin/redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=2920,expires=900,avg_ttl=38569333
+db2:keys=350,expires=150,avg_ttl=42576746
+
+
+$ cat /etc/redis/redis.conf
+# Redis 8.10 - new server
+bind 127.0.0.1 -::1
+port 6380
+protected-mode yes
+daemonize yes
+pidfile /run/redis/redis.pid
+logfile /var/log/redis/redis.log
+dir /var/lib/redis
+# modules shipped with Redis 8 (the official image loads all of them by default)
+loadmodule /usr/local/lib/redis/modules/redisearch.so
+loadmodule /usr/local/lib/redis/modules/rejson.so
+loadmodule /usr/local/lib/redis/modules/redisbloom.so
+loadmodule /usr/local/lib/redis/modules/redistimeseries.so
+
+
+$ ls -la /var/lib/redis /var/lib/redis-old
+/var/lib/redis:
+total 432
+drwxr-xr-x 2 root root   4096 Oct  3 09:30 .
+drwxr-xr-x 1 root root   4096 Oct  3 09:23 ..
+-rw-r--r-- 1 root root 432350 Oct  3 09:30 dump.rdb
+
+/var/lib/redis-old:
+total 432
+drwxr-xr-x 2 root root   4096 Oct  3 09:24 .
+drwxr-xr-x 1 root root   4096 Oct  3 09:23 ..
+-rw-r--r-- 1 root root 432267 Oct  3 09:24 dump.rdb
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     /opt/redis-7.2/bin/redis-server 127.0.0.1:6379
+     15 root     redis-server 127.0.0.1:6380
+  46305 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+15:M 03 Oct 2026 09:23:30.992 * <timeseries> Subscribe to topology changes events
+15:M 03 Oct 2026 09:23:30.992 * <timeseries> Enabled diskless replication
+15:M 03 Oct 2026 09:23:30.992 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+15:M 03 Oct 2026 09:23:30.992 * Server initialized
+15:M 03 Oct 2026 09:23:30.992 * Ready to accept connections tcp
+15:M 03 Oct 2026 09:23:30.992 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+15:S 03 Oct 2026 09:30:38.369 * Before turning into a replica, using my own master parameters to synthesize a cached master: I may be able to synchronize with the new master with just a partial transfer.
+15:S 03 Oct 2026 09:30:38.369 * Connecting to MASTER 127.0.0.1:6379
+15:S 03 Oct 2026 09:30:38.369 * MASTER <-> REPLICA sync started
+15:S 03 Oct 2026 09:30:38.369 * REPLICAOF 127.0.0.1:6379 enabled (user request from 'id=24 addr=127.0.0.1:55764 laddr=127.0.0.1:6380 fd=22 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 watch=0 qbuf=44 qbuf-free=20430 argv-mem=22 multi-mem=0 rbs=16384 rbp=16384 obl=0 oll=0 omem=0 omem-shared=0 omem-unshared=0 tot-mem=38190 events=r cmd=replicaof user=default redir=-1 resp=2 lib-name= lib-ver= io-thread=0 tot-net-in=44 tot-net-out=0 tot-cmds=0 read-events=1 avg-pipeline-len-sum=1 avg-pipeline-len-cnt=1')
+15:S 03 Oct 2026 09:30:38.369 * Non blocking connect for SYNC fired the event.
+15:S 03 Oct 2026 09:30:38.369 * Master replied to PING, replication can continue...
+15:S 03 Oct 2026 09:30:38.370 * Trying a partial resynchronization (request 6feda0a6274e3fff3845237a4010922c333eb60c:1).
+15:S 03 Oct 2026 09:30:43.154 * Full resync from master: c570ef30e579de05052055956aa10570d71b16d4:14
+15:S 03 Oct 2026 09:30:43.157 * MASTER <-> REPLICA sync: receiving streamed RDB from master with EOF to disk
+15:S 03 Oct 2026 09:30:43.160 * Discarding previously cached master state.
+15:S 03 Oct 2026 09:30:43.160 * MASTER <-> REPLICA sync: Loading DB in memory
+15:S 03 Oct 2026 09:30:43.161 * MASTER <-> REPLICA sync: Flushing old data
+15:S 03 Oct 2026 09:30:43.161 * <search> LOAD start source=REPLICATION sst=false disk=rebuild-from-keyspace
+15:S 03 Oct 2026 09:30:43.162 * Loading RDB produced by version 7.2.16
+15:S 03 Oct 2026 09:30:43.162 * RDB age 0 seconds
+15:S 03 Oct 2026 09:30:43.162 * RDB memory usage when created 2.55 Mb
+15:S 03 Oct 2026 09:30:43.164 * Done loading RDB, keys loaded: 3270, keys expired: 0.
+15:S 03 Oct 2026 09:30:43.164 * <search> LOAD end disk=rebuild-from-keyspace ok=true
+15:S 03 Oct 2026 09:30:43.164 * MASTER <-> REPLICA sync: Finished with success
+15:M 03 Oct 2026 09:33:49.510 * Connection with master lost.
+15:M 03 Oct 2026 09:33:49.510 * Caching the disconnected master state.
+15:M 03 Oct 2026 09:33:49.510 * Discarding previously cached master state.
+15:M 03 Oct 2026 09:33:49.510 * Setting secondary replication ID to c570ef30e579de05052055956aa10570d71b16d4, valid up to offset: 267. New replication ID is e737fe8fc3a14380585188085dc83509a9fee1d9
+15:M 03 Oct 2026 09:33:49.510 * MASTER MODE enabled (user request from 'id=9857 addr=127.0.0.1:54882 laddr=127.0.0.1:6380 fd=22 name= age=0 idle=0 flags=N db=0 sub=0 psub=0 ssub=0 multi=-1 watch=0 qbuf=36 qbuf-free=20438 argv-mem=14 multi-mem=0 rbs=16384 rbp=16384 obl=0 oll=0 omem=0 omem-shared=0 omem-unshared=0 tot-mem=38182 events=r cmd=replicaof user=default redir=-1 resp=2 lib-name= lib-ver= io-thread=0 tot-net-in=36 tot-net-out=0 tot-cmds=0 read-events=1 avg-pipeline-len-sum=1 avg-pipeline-len-cnt=1')
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+redis     8.1.0
+valkey    6.1.1

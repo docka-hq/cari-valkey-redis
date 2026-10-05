@@ -1,0 +1,68 @@
+[
+ {
+  "in": 479,
+  "out": 109,
+  "reasoning": 8,
+  "cached": 0,
+  "cost": 9.46526e-05,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1518,
+  "out": 97,
+  "reasoning": 24,
+  "cached": 0,
+  "cost": 0.0002324896,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2575,
+  "out": 1182,
+  "reasoning": 437,
+  "cached": 384,
+  "cost": 0.000619611944,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3338,
+  "out": 519,
+  "reasoning": 41,
+  "cached": 1472,
+  "cost": 0.000398361152,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3996,
+  "out": 265,
+  "reasoning": 74,
+  "cached": 2528,
+  "cost": 0.000278194448,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4243,
+  "out": 405,
+  "reasoning": 31,
+  "cached": 3296,
+  "cost": 0.000247552536,
+  "cost_source": "openrouter metered",
+  "model": "xiaomi/mimo-v2.6-flash",
+  "provider": "Io Net",
+  "stop": "stop"
+ }
+]

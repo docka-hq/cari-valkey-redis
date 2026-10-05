@@ -1,0 +1,116 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over knowledge-base articles using Valkey Search (FT.SEARCH).
+
+Usage: python3 /app/search.py < query.json
+  query.json contains one query embedding (a JSON list of 64 floats).
+Prints the ids of the 5 most similar articles (cosine similarity), one per
+line, most similar first. The similarity ranking is computed entirely inside
+Valkey by the KNN vector query; this script only forwards the query vector.
+"""
+import json
+import struct
+import sys
+
+from valkey import Valkey
+
+INDEX = "idx:articles"
+KEY_PREFIX = "article:"
+K = 5
+DIM = 64
+
+
+def main() -> None:
+    query_embedding = json.load(sys.stdin)
+    if len(query_embedding) != DIM:
+        sys.exit(f"query embedding must have {DIM} dimensions")
+    query_blob = struct.pack(f"<{DIM}f", *query_embedding)
+
+    r = Valkey(host="127.0.0.1", port=6379)
+    # KNN query: Valkey ranks all indexed articles by cosine distance and
+    # returns the K closest ones, already ordered nearest-first.
+    reply = r.execute_command(
+        "FT.SEARCH", INDEX,
+        f"*=>[KNN {K} @embedding $query_vector AS vec_distance]",
+        "PARAMS", 2, "query_vector", query_blob,
+        "NOCONTENT",
+        "DIALECT", 2,
+    )
+    # reply = [total_hits, key1, key2, ...] because of NOCONTENT
+    for item in reply[1 : 1 + K]:
+        key = item.decode() if isinstance(item, bytes) else item
+        print(key[len(KEY_PREFIX):] if key.startswith(KEY_PREFIX) else key)
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 08:56 .
+drwxr-xr-x 1 root root 4096 Oct  3 08:54 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root  859 Oct  3 08:56 load_articles.py
+-rwxr-xr-x 1 root root 1488 Oct  3 08:56 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+idx:articles
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      8 root     [valkey-server] <defunct>
+      9 root     python3 /opt/upstream/server.py
+    383 root     valkey-server 127.0.0.1:6379
+    554 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+383:M 03 Oct 2026 08:57:20.603 # <search> [warning], tid: 133920356734784, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_deferred_entry_cnt Flags:1
+383:M 03 Oct 2026 08:57:20.603 # <search> [warning], tid: 133920356734784, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+383:M 03 Oct 2026 08:57:20.603 # <search> [warning], tid: 133920356734784, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+383:M 03 Oct 2026 08:57:20.603 # <search> [warning], tid: 133920356734784, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+383:M 03 Oct 2026 08:57:20.603 # <search> [warning], tid: 133920356734784, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+383:M 03 Oct 2026 08:57:20.603 # <search> [warning], tid: 133920356734784, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+383:M 03 Oct 2026 08:57:20.603 # <search> [notice], tid: 133920356734784, /vmsdk/src/module.cc:148: search module was successfully loaded!
+383:M 03 Oct 2026 08:57:20.603 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+383:M 03 Oct 2026 08:57:20.604 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+383:M 03 Oct 2026 08:57:20.604 * <bf> Created new data type 'bloomfltr'
+383:M 03 Oct 2026 08:57:20.604 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+383:M 03 Oct 2026 08:57:20.604 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+383:M 03 Oct 2026 08:57:20.605 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+383:M 03 Oct 2026 08:57:20.606 * Static Module 'lua' successfully loaded
+383:M 03 Oct 2026 08:57:20.606 * Server initialized
+383:M 03 Oct 2026 08:57:20.606 * Cleaning slot migration log in anticipation of a load operation.
+383:M 03 Oct 2026 08:57:20.606 * Loading RDB produced by Valkey version 9.1.2
+383:M 03 Oct 2026 08:57:20.606 * RDB age 2 seconds
+383:M 03 Oct 2026 08:57:20.606 * RDB memory usage when created 8.08 Mb
+383:M 03 Oct 2026 08:57:20.609 # <search> [notice], tid: 133920356734784, /src/rdb_serialization.cc:166: Loading RDB from version: 1.2.0 with 1 sections.
+383:M 03 Oct 2026 08:57:20.612 # <search> [notice], tid: 133920356734784, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 1000)
+383:M 03 Oct 2026 08:57:20.615 # <search> [notice], tid: 133920356734784, /src/index_schema.cc:1468: Loading Index Extension, keys = 1000
+383:M 03 Oct 2026 08:57:20.620 # <search> [notice], tid: 133920356734784, /src/index_schema.cc:1530: Loading Mutation Entries, entries = 0
+383:M 03 Oct 2026 08:57:20.620 # <search> [notice], tid: 133920356734784, /src/index_schema.cc:1543: Loading Multi/Exec Entries, entries = 0
+383:M 03 Oct 2026 08:57:20.621 # <search> [notice], tid: 133920356734784, /src/index_schema.cc:1679: Loaded index schema with 2 attributes
+383:M 03 Oct 2026 08:57:20.621 # <search> [notice], tid: 133920356734784, /src/schema_manager.cc:712: Loading index from RDB: *redacted* (in db 0)
+383:M 03 Oct 2026 08:57:20.621 * Done loading RDB, keys loaded: 1000, keys expired: 0, all fields expired hashes: 0.
+383:M 03 Oct 2026 08:57:20.621 # <search> [notice], tid: 133920356734784, /src/index_schema.cc:1736: RDB load completed,  Mutation Queue contains 0 entries. Backfill not needed.
+383:M 03 Oct 2026 08:57:20.621 * DB loaded from disk: 0.015 seconds
+383:M 03 Oct 2026 08:57:20.621 * Ready to accept connections tcp
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

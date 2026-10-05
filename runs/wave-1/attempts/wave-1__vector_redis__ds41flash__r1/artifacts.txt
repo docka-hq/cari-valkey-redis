@@ -1,0 +1,145 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over the knowledge-base articles stored in Redis.
+
+Usage:
+    python3 /app/search.py < query.json
+
+`query.json` holds a single query embedding: a JSON list of 64 floats.
+
+The script prints the ids of the 5 most similar articles (cosine
+similarity), one per line, most similar first.
+
+All articles and the similarity computation live inside Redis: the
+embeddings are stored in the `articles:vectorset` vector set and the
+ranking is delegated to the Redis `VSIM` command.  This script never
+reads /data/articles.jsonl and never computes similarities itself.
+"""
+import json
+import os
+import sys
+
+import redis
+
+VECTOR_SET_KEY = "articles:vectorset"
+TOP_K = 5
+HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
+PORT = int(os.environ.get("REDIS_PORT", "6379"))
+
+
+def parse_query(raw):
+    """Return the query embedding from the raw stdin text.
+
+    Accepts a bare JSON list of floats as well as a JSON object that wraps
+    the embedding under a common field name.
+    """
+    data = json.loads(raw)
+    if isinstance(data, dict):
+        for field in ("embedding", "vector", "query", "query_embedding"):
+            if field in data:
+                data = data[field]
+                break
+    # Tolerate a single-element list wrapping the vector.
+    if isinstance(data, list) and len(data) == 1 and isinstance(data[0], list):
+        data = data[0]
+    if not isinstance(data, list):
+        raise ValueError("query must be a JSON list of floats")
+    return [float(x) for x in data]
+
+
+def main():
+    raw = sys.stdin.read()
+    query = parse_query(raw)
+    if not query:
+        return
+
+    client = redis.Redis(host=HOST, port=PORT, decode_responses=True)
+
+    # VSIM runs the similarity search (HNSW / exact) inside Redis.
+    # TRUTH forces an exact result, which is cheap for this dataset size.
+    reply = client.execute_command(
+        "VSIM", VECTOR_SET_KEY, "VALUES", len(query), *query,
+        "COUNT", TOP_K, "TRUTH",
+    )
+
+    # The reply is a list of element names (optionally [name, score] pairs).
+    idents = [
+        item[0] if isinstance(item, (list, tuple)) else item
+        for item in reply
+    ]
+
+    sys.stdout.write("\n".join(str(i) for i in idents) + "\n")
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:25 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:22 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1238 Oct  3 05:25 load_articles.py
+-rw-r--r-- 1 root root 2266 Oct  3 05:27 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+1
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     [redis-server] <defunct>
+     10 root     python3 /opt/upstream/server.py
+    999 root     redis-server 127.0.0.1:6379
+   1090 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+999:M 03 Oct 2026 05:27:58.893 * Module 'bf' loaded from /usr/local/lib/redis/modules/redisbloom.so
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> RedisTimeSeries version 81001, git_sha=
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> Registering configuration options: [
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-compaction-policy   :              }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-num-threads         :            3 }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-retention-policy    :            0 }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-duplicate-policy    :        block }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-encoding            :   compressed }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> 	{ ts-topology-events     :         true }
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> ]
+999:M 03 Oct 2026 05:27:58.893 * <timeseries> Detected redis oss (cluster-enabled=no)
+999:M 03 Oct 2026 05:27:58.894 * <timeseries> Subscribe to ASM events
+999:M 03 Oct 2026 05:27:58.894 * <timeseries> Subscribe to topology changes events
+999:M 03 Oct 2026 05:27:58.894 * <timeseries> Enabled diskless replication
+999:M 03 Oct 2026 05:27:58.894 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+999:M 03 Oct 2026 05:27:58.894 * Server initialized
+999:M 03 Oct 2026 05:27:58.894 * <search> LOAD start source=RDB_FILE sst=false disk=rebuild-from-keyspace
+999:M 03 Oct 2026 05:27:58.894 * Loading RDB produced by version 8.10.2
+999:M 03 Oct 2026 05:27:58.894 * RDB age 8 seconds
+999:M 03 Oct 2026 05:27:58.894 * RDB memory usage when created 2.73 Mb
+999:M 03 Oct 2026 05:27:58.899 * Done loading RDB, keys loaded: 1, keys expired: 0.
+999:M 03 Oct 2026 05:27:58.899 * <search> LOAD end disk=rebuild-from-keyspace ok=true
+999:M 03 Oct 2026 05:27:58.899 * DB loaded from disk: 0.005 seconds
+999:M 03 Oct 2026 05:27:58.899 * Ready to accept connections tcp
+999:M 03 Oct 2026 05:27:58.899 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

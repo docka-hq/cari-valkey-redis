@@ -1,0 +1,200 @@
+[
+ {
+  "in": 534,
+  "out": 3799,
+  "reasoning": 3594,
+  "cached": 0,
+  "cost": 0.001108576,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Novita",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1308,
+  "out": 2148,
+  "reasoning": 1844,
+  "cached": 0,
+  "cost": 0.00111978,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Relace",
+  "stop": "tool_use"
+ },
+ {
+  "in": 3218,
+  "out": 1372,
+  "reasoning": 1188,
+  "cached": 0,
+  "cost": 0.0006533033,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4625,
+  "out": 756,
+  "reasoning": 50,
+  "cached": 0,
+  "cost": 0.00060018,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "Novita",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5385,
+  "out": 481,
+  "reasoning": 66,
+  "cached": 3200,
+  "cost": 0.00037131575,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5873,
+  "out": 2808,
+  "reasoning": 2566,
+  "cached": 5376,
+  "cost": 0.00091666497,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6216,
+  "out": 2325,
+  "reasoning": 2060,
+  "cached": 5824,
+  "cost": 0.00078037518,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6552,
+  "out": 374,
+  "reasoning": 41,
+  "cached": 6208,
+  "cost": 0.00023748556,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7166,
+  "out": 2635,
+  "reasoning": 1927,
+  "cached": 6528,
+  "cost": 0.00089945336,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8023,
+  "out": 672,
+  "reasoning": 88,
+  "cached": 7104,
+  "cost": 0.00038401623,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8625,
+  "out": 1593,
+  "reasoning": 1040,
+  "cached": 8000,
+  "cost": 0.00063180975,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9473,
+  "out": 1892,
+  "reasoning": 1067,
+  "cached": 8576,
+  "cost": 0.00074784697,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 10348,
+  "out": 578,
+  "reasoning": 100,
+  "cached": 9472,
+  "cost": 0.00039384904,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 10875,
+  "out": 564,
+  "reasoning": 421,
+  "cached": 10304,
+  "cost": 0.00037831443,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11223,
+  "out": 827,
+  "reasoning": 473,
+  "cached": 10816,
+  "cost": 0.00044665777,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11634,
+  "out": 351,
+  "reasoning": 44,
+  "cached": 11200,
+  "cost": 0.0003223194,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 12097,
+  "out": 475,
+  "reasoning": 396,
+  "cached": 11584,
+  "cost": 0.00037004123,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "tool_use"
+ },
+ {
+  "in": 12212,
+  "out": 597,
+  "reasoning": 7,
+  "cached": 12096,
+  "cost": 0.00037943802,
+  "cost_source": "openrouter metered",
+  "model": "z-ai/glm-5.3-flash",
+  "provider": "StreamLake",
+  "stop": "stop"
+ }
+]

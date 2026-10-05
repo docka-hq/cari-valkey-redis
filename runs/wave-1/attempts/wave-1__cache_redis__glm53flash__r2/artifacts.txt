@@ -1,0 +1,219 @@
+$ cat /app/catalog.py
+"""Product catalog used by the storefront.
+
+get_product(product_id) -> dict    {"id": int, "name": str, "price": float, "currency": str}
+update_price(product_id, price)    changes the price in the inventory service
+
+Reads are cached in the local Redis server (127.0.0.1:6379), so a product
+read recently is served from Redis by every storefront process instead of
+calling the inventory service again (~300 ms per call).  Cached products
+expire after 5 minutes (TTL 300 s).
+
+Cross-process consistency:
+  * update_price() bumps a per-product generation counter in Redis after the
+    inventory service has accepted the new price.  The next get_product() in
+    ANY process sees the new generation, misses on the stale cached copy and
+    fetches the new price - without waiting out the old entry's TTL.
+  * Cache fills are guarded by WATCH on the generation counter, so a fill
+    that started before an update can never write its now-stale copy into
+    the cache; it re-reads the freshened cache instead.
+  * If Redis is unavailable, reads and updates degrade to direct inventory
+    calls (with a short circuit breaker so the storefront does not pay a
+    connection timeout on every single call).
+"""
+import json
+import time
+import urllib.request
+
+import redis
+from redis.backoff import NoBackoff
+from redis.retry import Retry
+
+INVENTORY_URL = "http://127.0.0.1:8000"
+
+REDIS_HOST = "127.0.0.1"
+REDIS_PORT = 6379
+REDIS_DB = 0
+
+PRODUCT_TTL_SECONDS = 300  # cached products expire after 5 minutes
+GEN_TTL_SECONDS = 7200     # generation counters outlive any cache entry
+RETRY_REDIS_AFTER = 2.0    # seconds to bypass Redis after a connection failure
+
+_PREFIX = "catalog:product:"
+_GEN = "catalog:gen:"
+
+_redis = redis.Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    db=REDIS_DB,
+    decode_responses=True,
+    socket_timeout=1,
+    socket_connect_timeout=1,
+    # One attempt, no retries: a Redis outage must not multiply into a
+    # latency problem for the storefront (we fall back to direct calls).
+    retry=Retry(NoBackoff(), 0),
+)
+
+_down_until = 0.0  # circuit breaker: skip Redis while (re)connecting keeps failing
+
+
+def _gen_key(product_id: int) -> str:
+    return f"{_GEN}{int(product_id)}"
+
+
+def _value_key(product_id: int, generation: int) -> str:
+    return f"{_PREFIX}{int(product_id)}:{int(generation)}"
+
+
+def _fetch_product(product_id: int) -> dict:
+    with urllib.request.urlopen(
+        f"{INVENTORY_URL}/products/{int(product_id)}", timeout=10
+    ) as resp:
+        return json.load(resp)
+
+
+def _is_product(payload) -> bool:
+    # Never cache or serve anything but a genuine product payload.
+    return isinstance(payload, dict) and "id" in payload
+
+
+def _mark_redis_down() -> None:
+    global _down_until
+    _down_until = time.monotonic() + RETRY_REDIS_AFTER
+
+
+
+def _redis_down() -> bool:
+    return time.monotonic() < _down_until
+
+
+def get_product(product_id: int) -> dict:
+    product_id = int(product_id)
+    while not _redis_down():
+        try:
+            generation = int(_redis.get(_gen_key(product_id)) or 0)
+            raw = _redis.get(_value_key(product_id, generation))
+            if raw is not None:
+                try:
+                    product = json.loads(raw)
+                except (ValueError, TypeError):
+                    raw = None  # unreadable entry: treat as a miss
+                else:
+                    if _is_product(product):
+                        return product
+
+            product = _fetch_product(product_id)
+            if not _is_product(product):
+                return product  # e.g. an error body: never cached
+
+            # Store the fill, unless an update moved the generation meanwhile.
+            with _redis.pipeline() as pipe:
+                try:
+                    pipe.watch(_gen_key(product_id))
+                    if int(pipe.get(_gen_key(product_id)) or 0) != generation:
+                        continue  # product was updated while we fetched: retry fresh
+                    pipe.multi()
+                    pipe.set(
+                        _value_key(product_id, generation),
+                        json.dumps(product),
+                        ex=PRODUCT_TTL_SECONDS,
+                    )
+                    pipe.execute()
+                finally:
+                    pipe.reset()
+            return product
+
+        except redis.WatchError:
+            continue  # concurrent update won the race: retry the whole read
+        except (redis.ConnectionError, redis.TimeoutError):
+            _mark_redis_down()
+            break
+        except redis.RedisError:
+            break  # transient Redis error: fall through to a direct call
+    return _fetch_product(product_id)
+
+
+def update_price(product_id: int, price: float) -> None:
+    body = json.dumps({"price": price}).encode()
+    req = urllib.request.Request(
+        f"{INVENTORY_URL}/products/{int(product_id)}",
+        data=body,
+        method="PUT",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+
+    # The new price is live: invalidate every process's cached copy by moving
+    # to the next generation.  The next get_product() for this product - in
+    # any process - then fetches the new price instead of serving a stale one.
+    if _redis_down():
+        return
+    try:
+        pipe = _redis.pipeline(transaction=True)
+        pipe.incr(_gen_key(product_id))
+        pipe.expire(_gen_key(product_id), GEN_TTL_SECONDS)
+        pipe.execute()
+    except (redis.ConnectionError, redis.TimeoutError):
+        _mark_redis_down()
+    except redis.RedisError:
+        pass  # cache unavailable: stale copies expire at their usual TTL
+
+
+$ ls -la /app
+total 24
+drwxr-xr-x 1 root root 4096 Oct  3 06:54 .
+drwxr-xr-x 1 root root 4096 Oct  3 06:29 ..
+drwxr-xr-x 2 root root 4096 Oct  3 06:54 __pycache__
+-rw-r--r-- 1 root root 5688 Oct  3 06:53 catalog.py
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     [redis-server] <defunct>
+     10 root     python3 /opt/upstream/server.py
+    799 root     [redis-server] <defunct>
+   1097 root     [redis-server] <defunct>
+   1137 root     [redis-server] <defunct>
+   1181 root     redis-server 127.0.0.1:6379
+   1303 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> Redis version found by RedisTimeSeries : 8.10.2 - oss
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> Registering configuration options: [
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-compaction-policy   :              }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-num-threads         :            3 }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-libmr-protocol      :     INTERNAL }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-retention-policy    :            0 }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-duplicate-policy    :        block }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-encoding            :   compressed }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> 	{ ts-topology-events     :         true }
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> ]
+1181:M 03 Oct 2026 06:54:03.511 * <timeseries> Detected redis oss (cluster-enabled=no)
+1181:M 03 Oct 2026 06:54:03.512 * <timeseries> Subscribe to ASM events
+1181:M 03 Oct 2026 06:54:03.512 * <timeseries> Subscribe to topology changes events
+1181:M 03 Oct 2026 06:54:03.512 * <timeseries> Enabled diskless replication
+1181:M 03 Oct 2026 06:54:03.512 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+1181:M 03 Oct 2026 06:54:03.512 * Server initialized
+1181:M 03 Oct 2026 06:54:03.512 * <search> LOAD start source=RDB_FILE sst=false disk=rebuild-from-keyspace
+1181:M 03 Oct 2026 06:54:03.512 * Loading RDB produced by version 8.10.2
+1181:M 03 Oct 2026 06:54:03.512 * RDB age 536 seconds
+1181:M 03 Oct 2026 06:54:03.512 * RDB memory usage when created 1.74 Mb
+1181:M 03 Oct 2026 06:54:03.512 * Done loading RDB, keys loaded: 2, keys expired: 30.
+1181:M 03 Oct 2026 06:54:03.512 * <search> LOAD end disk=rebuild-from-keyspace ok=true
+1181:M 03 Oct 2026 06:54:03.512 * DB loaded from disk: 0.001 seconds
+1181:M 03 Oct 2026 06:54:03.512 * Ready to accept connections tcp
+1181:M 03 Oct 2026 06:54:03.512 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+1181:M 03 Oct 2026 06:54:38.627 * BGSAVE done, 0 keys saved, 0 keys skipped, 89 bytes written.
+1181:M 03 Oct 2026 06:54:38.628 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

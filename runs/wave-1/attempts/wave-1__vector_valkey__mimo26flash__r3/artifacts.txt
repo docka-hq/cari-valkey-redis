@@ -1,0 +1,114 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over Valkey (Valkey Search module, kNN / cosine).
+
+stdin:  a JSON list of 64 floats (the query embedding)
+stdout: ids of the 5 most similar articles, most similar first
+
+The similarity search runs entirely inside Valkey (FT.SEARCH with a KNN
+vector query); this script only ships the query vector to the server and
+prints the ids of the documents Valkey returns.
+"""
+import json
+import struct
+import sys
+
+import redis
+
+INDEX = "idx:articles"
+TOP_K = 5
+
+
+def main() -> None:
+    query = json.load(sys.stdin)
+    if len(query) != 64:
+        sys.exit(f"expected 64 floats, got {len(query)}")
+    # Raw little-endian FLOAT32 blob, the format the index stores.
+    vec = struct.pack("<64f", *query)
+
+    r = redis.Redis(host="127.0.0.1", port=6379, decode_responses=False)
+    # Pure kNN query: Valkey ranks by cosine distance and returns the
+    # top TOP_K documents, nearest first.
+    res = r.execute_command(
+        "FT.SEARCH", INDEX,
+        f"=>[KNN {TOP_K} @embedding $vec]",
+        "PARAMS", "2", "vec", vec,
+        "DIALECT", "2",
+        "LIMIT", "0", TOP_K,
+    )
+
+    for key in res[1::2]:  # [total, key1, doc1, key2, doc2, ...]
+        print(key.decode().split(":", 1)[1])
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 05:53 .
+drwxr-xr-x 1 root root 4096 Oct  3 05:52 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1208 Oct  3 05:53 load.py
+-rwxr-xr-x 1 root root 1270 Oct  3 05:53 search.py
+
+
+$ valkey-cli -p 6379 FT._LIST
+idx:articles
+
+
+$ valkey-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,keys_with_volatile_items=0
+
+
+$ valkey-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     valkey-server 127.0.0.1:6379
+     10 root     python3 /opt/upstream/server.py
+    450 root     head -40
+
+
+$ tail -n 30 /var/log/valkey/valkey.log
+9:M 03 Oct 2026 05:52:11.572 # <search> [warning], tid: 127983750072128, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_entry_count Flags:1
+9:M 03 Oct 2026 05:52:11.572 # <search> [warning], tid: 127983750072128, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_generated_value_cnt Flags:1
+9:M 03 Oct 2026 05:52:11.572 # <search> [warning], tid: 127983750072128, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_hash_extern_errors Flags:1
+9:M 03 Oct 2026 05:52:11.572 # <search> [warning], tid: 127983750072128, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_lru_promote_cnt Flags:1
+9:M 03 Oct 2026 05:52:11.572 # <search> [warning], tid: 127983750072128, /vmsdk/src/info.cc:205: Defined Info Field: vector_externing_num_lru_entries Flags:1
+9:M 03 Oct 2026 05:52:11.572 # <search> [notice], tid: 127983750072128, /vmsdk/src/module.cc:148: search module was successfully loaded!
+9:M 03 Oct 2026 05:52:11.572 * Module 'search' loaded from /usr/lib/valkey/libsearch.so
+9:M 03 Oct 2026 05:52:11.572 * Legacy Redis Module /usr/lib/valkey/libvalkey_bloom.so found
+9:M 03 Oct 2026 05:52:11.572 * <bf> Created new data type 'bloomfltr'
+9:M 03 Oct 2026 05:52:11.572 * Module 'bf' loaded from /usr/lib/valkey/libvalkey_bloom.so
+9:M 03 Oct 2026 05:52:11.573 * Legacy Redis Module /usr/lib/valkey/libvalkey_ldap.so found
+9:M 03 Oct 2026 05:52:11.574 * Module 'ldap' loaded from /usr/lib/valkey/libvalkey_ldap.so
+9:M 03 Oct 2026 05:52:11.574 * Static Module 'lua' successfully loaded
+9:M 03 Oct 2026 05:52:11.574 * Server initialized
+9:M 03 Oct 2026 05:52:11.574 * Ready to accept connections tcp
+9:M 03 Oct 2026 05:52:24.029 # <search> [notice], tid: 127983750072128, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 0)
+9:M 03 Oct 2026 05:52:24.130 # <search> [notice], tid: 127983750072128, /src/index_schema.cc:974: Index schema *redacted* finished backfill. Scanned 511 keys in 100.751173ms
+9:M 03 Oct 2026 05:53:11.369 # <search> [notice], tid: 127983750072128, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 1000)
+9:M 03 Oct 2026 05:53:11.395 # <search> [notice], tid: 127983750072128, /src/index_schema.cc:974: Index schema *redacted* finished backfill. Scanned 1000 keys in 25.897641ms
+9:M 03 Oct 2026 05:53:14.262 # <search> [notice], tid: 127983499073216, /src/index_schema.cc:334: Index schema *redacted* dropped from DB 0
+9:M 03 Oct 2026 05:53:16.184 # <search> [notice], tid: 127983499073216, /src/index_schema.cc:334: Index schema *redacted* dropped from DB 0
+9:M 03 Oct 2026 05:53:18.411 # <search> [notice], tid: 127983750072128, /src/index_schema.cc:131: Starting backfill for index schema in DB 0: *redacted* (size: 0)
+9:M 03 Oct 2026 05:53:18.439 # <search> [notice], tid: 127983750072128, /src/index_schema.cc:974: Index schema *redacted* finished backfill. Scanned 185 keys in 28.228812ms
+9:M 03 Oct 2026 05:53:52.929 # <search> [notice], tid: 127983750072128, /src/rdb_serialization.cc:260: Saving 1 ValkeySearch RDB sections with minimum version 1.2.0
+9:M 03 Oct 2026 05:53:52.929 * <search> Saving aux metadata for SchemaManager to aux RDB
+9:M 03 Oct 2026 05:53:52.929 # <module> [notice], tid: 127983750072128, /src/index_schema.cc:1240: Starting RDB save for index schema: *redacted* Saving in version 2 format
+9:M 03 Oct 2026 05:53:52.929 # <module> [notice], tid: 127983750072128, /src/index_schema.cc:1268: Starting to save 3 attributes.
+9:M 03 Oct 2026 05:53:52.932 # <module> [notice], tid: 127983750072128, /src/index_schema.cc:1410: Writing Index Extension, keys = 1000
+9:M 03 Oct 2026 05:53:52.932 # <module> [notice], tid: 127983750072128, /src/index_schema.cc:1428: Writing mutation queue records = 0 Total queue:0
+9:M 03 Oct 2026 05:53:52.934 * DB saved on disk
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

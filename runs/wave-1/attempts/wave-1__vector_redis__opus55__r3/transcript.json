@@ -1,0 +1,120 @@
+[
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_01V1ea7GzttGJxnEmFZyFDv1",
+    "name": "exec",
+    "input": {
+     "cmd": "redis-cli INFO server | head -20; redis-cli MODULE LIST; head -c 300 /data/articles.jsonl; echo; wc -l /data/articles.jsonl; python3 -c \"import redis; print(redis.__version__)\"; grep -v '^#' /etc/redis/redis.conf | grep -v '^$' | head -50"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_01F52AN81cfJ1vuVFXxnjZLv",
+    "name": "exec",
+    "input": {
+     "cmd": "redis-cli CONFIG GET save; redis-cli CONFIG GET appendonly; redis-cli DBSIZE; redis-cli FT._LIST; redis-cli CONFIG GET maxmemory*; python3 -c \"\nimport json,collections,math\nids=collections.Counter();bad=0\nfor l in open('/data/articles.jsonl'):\n    d=json.loads(l);ids[d['id']]+=1\n    e=d.get('embedding')\n    if not isinstance(e,list) or len(e)!=64 or any(not isinstance(x,(int,float)) or math.isnan(x) for x in e) or all(x==0 for x in e): bad+=1;print(d.get('id'),type(e), len(e) if isinstance(e,list) else None)\nprint('dups',[k for k,v in ids.items() if v>1],'bad',bad, set(json.loads(open('/data/articles.jsonl').readline()).keys()))\n\""
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "Data is clean. I'll store articles as hashes with FLOAT32 vectors and create a FLAT (exact) cosine index.",
+  "tool_calls": [
+   {
+    "id": "toolu_012otWopkaYYkqmaPdoRc6u9",
+    "name": "exec",
+    "input": {
+     "cmd": "cat > /app/load.py <<'EOF'\nimport json, struct, redis\nr = redis.Redis(host='127.0.0.1', port=6379)\np = r.pipeline(transaction=False)\nfor line in open('/data/articles.jsonl'):\n    d = json.loads(line)\n    p.hset(f\"article:{d['id']}\", mapping={'id': d['id'], 'title': d['title'],\n           'embedding': struct.pack('<64f', *d['embedding'])})\np.execute()\ntry: r.execute_command('FT.DROPINDEX', 'idx:articles')\nexcept redis.ResponseError: pass\nr.execute_command('FT.CREATE','idx:articles','ON','HASH','PREFIX','1','article:',\n  'SCHEMA','id','TAG','title','TEXT','embedding','VECTOR','FLAT','6',\n  'TYPE','FLOAT32','DIM','64','DISTANCE_METRIC','COSINE')\nEOF\ncat > /app/search.py <<'EOF'\nimport sys, json, struct, redis\nq = json.load(sys.stdin)\nr = redis.Redis(host='127.0.0.1', port=6379, decode_responses=False)\nres = r.execute_command('FT.SEARCH', 'idx:articles', '*=>[KNN 5 @embedding $v AS score]',\n    'PARAMS', '2', 'v', struct.pack(f'<{len(q)}f', *q),\n    'SORTBY', 'score', 'ASC', 'RETURN', '2', 'id', 'score', 'LIMIT', '0', '5', 'DIALECT', '2')\nfor i in range(2, len(res), 2):\n    f = dict(zip(res[i][::2], res[i][1::2]))\n    print(f[b'id'].decode())\nEOF\npython3 /app/load.py && sleep 1 && redis-cli FT.INFO idx:articles | grep -A1 -E 'num_docs|hash_indexing_failures|percent_indexed'"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "Now verify against a brute-force reference (test only), including ties/near-duplicates.",
+  "tool_calls": [
+   {
+    "id": "toolu_017NYxNuuSWgvVmJfSSdK8Lk",
+    "name": "exec",
+    "input": {
+     "cmd": "cd /tmp && python3 -c \"\nimport json,random,subprocess,math\nA=[json.loads(l) for l in open('/data/articles.jsonl')]\ndef cos(a,b): return sum(x*y for x,y in zip(a,b))/math.sqrt(sum(x*x for x in a)*sum(y*y for y in b))\nrandom.seed(1); bad=0\nfor t in range(40):\n    q=random.choice(A)['embedding'] if t<20 else [random.gauss(0,1) for _ in range(64)]\n    if t<20: q=[x+random.gauss(0,0.02) for x in q]\n    exp=[a['id'] for a in sorted(A,key=lambda a:-cos(q,a['embedding']))[:5]]\n    got=subprocess.run(['python3','/app/search.py'],input=json.dumps(q),capture_output=True,text=True).stdout.split()\n    if got!=exp:\n        bad+=1; print(t,exp,got,[round(cos(q,a['embedding']),6) for a in sorted(A,key=lambda a:-cos(q,a['embedding']))[:6]])\nprint('mismatches',bad)\n\""
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_01RpMWpBEtBvLAJiNw14gryL",
+    "name": "exec",
+    "input": {
+     "cmd": "cd /tmp && python3 -c \"\nimport json;print(json.dumps(json.loads(open('/data/articles.jsonl').readline())['embedding']))\" > q.json; python3 /app/search.py < q.json"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "",
+  "tool_calls": [
+   {
+    "id": "toolu_01KbcCsVPs1by5Sw9czhT8fN",
+    "name": "exec",
+    "input": {
+     "cmd": "cd /tmp && python3 -c \"\nimport json,struct,redis\nq=json.load(open('q.json'))\nr=redis.Redis()\nprint(r.connection_pool.connection_kwargs)\nprint(r.execute_command('FT.SEARCH','idx:articles','*=>[KNN 5 @embedding \\$v AS score]','PARAMS','2','v',struct.pack('<64f',*q),'SORTBY','score','ASC','RETURN','2','id','score','LIMIT','0','5','DIALECT','2'))\""
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "The client is getting RESP3 replies. I'll set `protocol=2` explicitly so the reply format is stable.",
+  "tool_calls": [
+   {
+    "id": "toolu_01SmmtTPT77cSq51wrpaJ4ij",
+    "name": "exec",
+    "input": {
+     "cmd": "cat > /app/search.py <<'EOF'\nimport sys, json, struct, redis\nq = json.load(sys.stdin)\nr = redis.Redis(host='127.0.0.1', port=6379, protocol=2)\nres = r.execute_command('FT.SEARCH', 'idx:articles', '*=>[KNN 5 @embedding $v AS score]',\n    'PARAMS', '2', 'v', struct.pack(f'<{len(q)}f', *q),\n    'SORTBY', 'score', 'ASC', 'RETURN', '2', 'id', 'score', 'LIMIT', '0', '5', 'DIALECT', '2')\nif isinstance(res, dict):  # RESP3 reply shape\n    rows = [x[b'extra_attributes'] for x in res[b'results']]\nelse:                      # RESP2 reply shape\n    rows = [dict(zip(res[i][::2], res[i][1::2])) for i in range(2, len(res), 2)]\nfor f in rows:\n    print(f[b'id'].decode())\nEOF\ncd /tmp && python3 /app/search.py < q.json && python3 -c \"\nimport json,random,subprocess,math\nA=[json.loads(l) for l in open('/data/articles.jsonl')]\ndef cos(a,b): return sum(x*y for x,y in zip(a,b))/math.sqrt(sum(x*x for x in a)*sum(y*y for y in b))\nrandom.seed(1); bad=0\nfor t in range(60):\n    q=random.choice(A)['embedding'] if t<30 else [random.gauss(0,1) for _ in range(64)]\n    if t<30: q=[x+random.gauss(0,0.02) for x in q]\n    s=sorted(A,key=lambda a:-cos(q,a['embedding'])); exp=[a['id'] for a in s[:5]]\n    got=subprocess.run(['python3','/app/search.py'],input=json.dumps(q),capture_output=True,text=True).stdout.split()\n    if got!=exp: bad+=1; print(t,exp,got,[round(cos(q,a['embedding']),6) for a in s[:6]])\nprint('mismatches',bad)\n\""
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "All 60 tests match brute-force cosine exactly. Now I'll save to disk so the data survives a restart:",
+  "tool_calls": [
+   {
+    "id": "toolu_01YH4AzcMhvsoc4YEEfBEymg",
+    "name": "exec",
+    "input": {
+     "cmd": "redis-cli SAVE; redis-cli LASTSAVE; ls -la /var/lib/redis; redis-cli DBSIZE"
+    }
+   }
+  ],
+  "stop": "tool_use"
+ },
+ {
+  "role": "assistant",
+  "text": "Semantic search over the articles now runs inside Redis. I tested `search.py` on 60 queries, and every one returned the same top 5 IDs, in the same order, as a brute-force cosine calculation.\n\n**What I set up**\n- **Articles:** all 1,000 are in Redis, one per key named `article:<id>` (for example `article:kb-0001`). Each holds the `id`, the `title` and the embedding. I checked the file first: no duplicate IDs and no bad or empty embeddings.\n- **Search index:** `idx:articles` ranks articles by cosine similarity. It compares the query against every article, so results are exact rather than approximate. It shows all 1,000 articles indexed with no failures.\n- **`/app/search.py`:** reads the query embedding from stdin, asks Redis for the 5 nearest articles, and prints their IDs, most similar first. It doesn't read `/data/articles.jsonl` or compute any similarities itself.\n- **`/app/load.py`:** the script I used to load the data. Running it again reloads everything and rebuilds the index from scratch.\n\n**Testing**\n- The 60 test queries were 30 slightly altered copies of real article embeddings and 30 random vectors.\n- My first version of `search.py` printed nothing: the Redis client here returns results in a different format than the script expected. I fixed the script to pin the format and accept either one, then ran all 60 tests again on the fixed version.\n\nI also forced a save to disk (`dump.rdb`), so the articles and index will still be there if Redis restarts.",
+  "tool_calls": [],
+  "stop": "end_turn"
+ }
+]

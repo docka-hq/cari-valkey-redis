@@ -1,0 +1,122 @@
+$ cat /app/search.py
+#!/usr/bin/env python3
+"""Semantic search over knowledge-base articles, served entirely by Redis.
+
+Usage: python3 /app/search.py < query.json
+where query.json is a JSON list of 64 floats (the query embedding).
+
+All article embeddings live in Redis hashes (article:<id>, field 'emb'),
+indexed by idx:articles: a 64-dim FLOAT32 vector index over the 1,000
+articles. The nearest-neighbor query, the distance metric and the
+ranking of the top 5 all run inside Redis (FT.AGGREGATE with a KNN
+vector step, sorted by ascending distance). This script only packs the
+query vector and prints the ids Redis returns.
+"""
+import json
+import struct
+import sys
+
+import redis
+
+INDEX = "idx:articles"
+PREFIX = "article:"
+DIM = 64
+K = 5
+
+
+def main() -> None:
+    query = json.load(sys.stdin)
+    if not isinstance(query, list) or len(query) != DIM:
+        sys.exit(f"error: expected a JSON list of {DIM} floats")
+
+    blob = struct.pack(f"<{DIM}f", *query)  # little-endian float32
+
+    r = redis.Redis(host="127.0.0.1", port=6379)
+    res = r.execute_command(
+        "FT.AGGREGATE", INDEX,
+        f"*=>[KNN {K} @emb $vec AS score]",
+        "PARAMS", 2, "vec", blob,
+        "DIALECT", 2,
+        "LOAD", 2, "@id", "@score",
+        "SORTBY", 2, "@score", "ASC",
+    )
+
+    rows = res[b"results"] if isinstance(res, dict) else res[1:]
+    for row in rows:
+        attrs = row[b"extra_attributes"] if isinstance(res, dict) else row[1]
+        key = attrs[b"id"] if isinstance(attrs, dict) else attrs[attrs.index(b"id") + 1]
+        print(key.decode())
+
+
+if __name__ == "__main__":
+    main()
+
+
+$ ls -la /app
+total 20
+drwxr-xr-x 1 root root 4096 Oct  3 08:59 .
+drwxr-xr-x 1 root root 4096 Oct  3 08:57 ..
+-rw-r--r-- 1 root root  845 Oct  3 04:56 catalog.py
+-rw-r--r-- 1 root root 1767 Oct  3 08:59 load_articles.py
+-rw-r--r-- 1 root root 1577 Oct  3 09:06 search.py
+
+
+$ redis-cli -p 6379 FT._LIST
+idx:articles
+
+
+$ redis-cli -p 6379 INFO keyspace
+# Keyspace
+db0:keys=1000,expires=0,avg_ttl=0,subexpiry=0
+
+
+$ redis-cli -p 6379 DBSIZE
+1000
+
+
+$ ps -eo pid,user,args | grep -v ' ps -eo' | head -40
+    PID USER     COMMAND
+      1 root     sleep infinity
+      9 root     [redis-server] <defunct>
+     10 root     python3 /opt/upstream/server.py
+    547 root     redis-server 127.0.0.1:6379
+    721 root     head -40
+
+
+$ tail -n 30 /var/log/redis/redis.log
+547:M 03 Oct 2026 09:06:28.663 * <timeseries> 	{ ts-duplicate-policy    :        block }
+547:M 03 Oct 2026 09:06:28.663 * <timeseries> 	{ ts-chunk-size-bytes    :         4096 }
+547:M 03 Oct 2026 09:06:28.663 * <timeseries> 	{ ts-encoding            :   compressed }
+547:M 03 Oct 2026 09:06:28.663 * <timeseries> 	{ ts-ignore-max-time-diff:            0 }
+547:M 03 Oct 2026 09:06:28.663 * <timeseries> 	{ ts-ignore-max-val-diff :     0.000000 }
+547:M 03 Oct 2026 09:06:28.663 * <timeseries> 	{ ts-topology-events     :         true }
+547:M 03 Oct 2026 09:06:28.663 * <timeseries> ]
+547:M 03 Oct 2026 09:06:28.664 * <timeseries> Detected redis oss (cluster-enabled=no)
+547:M 03 Oct 2026 09:06:28.664 * <timeseries> Subscribe to ASM events
+547:M 03 Oct 2026 09:06:28.664 * <timeseries> Subscribe to topology changes events
+547:M 03 Oct 2026 09:06:28.664 * <timeseries> Enabled diskless replication
+547:M 03 Oct 2026 09:06:28.664 * Module 'timeseries' loaded from /usr/local/lib/redis/modules/redistimeseries.so
+547:M 03 Oct 2026 09:06:28.664 * Server initialized
+547:M 03 Oct 2026 09:06:28.664 * <search> LOAD start source=RDB_FILE sst=false disk=rebuild-from-keyspace
+547:M 03 Oct 2026 09:06:28.664 * Loading RDB produced by version 8.10.2
+547:M 03 Oct 2026 09:06:28.664 * RDB age 4 seconds
+547:M 03 Oct 2026 09:06:28.664 * RDB memory usage when created 2.77 Mb
+547:M 03 Oct 2026 09:06:28.664 * <search> RDB Load, SST persistence: false
+547:M 03 Oct 2026 09:06:28.664 * <search> Loading RDB for IndexSpec without SST flag
+547:M 03 Oct 2026 09:06:28.664 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 279080B
+547:M 03 Oct 2026 09:06:28.668 * <search> DocTable capacity increase from 1000 to 1501
+547:M 03 Oct 2026 09:06:28.668 * Done loading RDB, keys loaded: 1000, keys expired: 0.
+547:M 03 Oct 2026 09:06:28.668 * <search> LOAD end disk=rebuild-from-keyspace ok=true
+547:M 03 Oct 2026 09:06:28.668 * DB loaded from disk: 0.004 seconds
+547:M 03 Oct 2026 09:06:28.668 * Ready to accept connections tcp
+547:M 03 Oct 2026 09:06:28.668 # WARNING: Redis does not require authentication. Redis will accept connections from any local client.
+547:M 03 Oct 2026 09:06:43.366 * <search> Successfully dropped index idx:articles
+547:M 03 Oct 2026 09:06:43.368 * <search> Creating vector index of type FLAT. Required memory for a block of 1024 vectors: 279080B
+547:M 03 Oct 2026 09:06:43.368 * <search> Successfully created index idx:articles
+547:M 03 Oct 2026 09:06:43.390 * <search> DocTable capacity increase from 1000 to 1501
+
+
+$ pip3 list 2>/dev/null | grep -i -E 'redis|valkey|glide|numpy'
+numpy     2.5.3
+redis     8.1.0
+valkey    6.1.1

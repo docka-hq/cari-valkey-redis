@@ -1,0 +1,233 @@
+[
+ {
+  "in": 678,
+  "out": 145,
+  "reasoning": 9,
+  "cached": 512,
+  "cost": 0.00010388,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1098,
+  "out": 450,
+  "reasoning": 292,
+  "cached": 512,
+  "cost": 0.00030368,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1460,
+  "out": 246,
+  "reasoning": 189,
+  "cached": 1024,
+  "cost": 0.00018552,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 1577,
+  "out": 45,
+  "reasoning": 1,
+  "cached": 1280,
+  "cost": 6.448e-05,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2548,
+  "out": 319,
+  "reasoning": 210,
+  "cached": 1536,
+  "cost": 0.0002626,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 2879,
+  "out": 118,
+  "reasoning": 18,
+  "cached": 2304,
+  "cost": 0.00013988,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 4542,
+  "out": 2831,
+  "reasoning": 2660,
+  "cached": 2816,
+  "cost": 0.00182396,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 5219,
+  "out": 671,
+  "reasoning": 513,
+  "cached": 4352,
+  "cost": 0.00052432,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 6036,
+  "out": 1247,
+  "reasoning": 1049,
+  "cached": 5120,
+  "cost": 0.00088724,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7014,
+  "out": 1907,
+  "reasoning": 1709,
+  "cached": 5888,
+  "cost": 0.001307,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 7257,
+  "out": 4426,
+  "reasoning": 3264,
+  "cached": 6912,
+  "cost": 0.00280764,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8445,
+  "out": 614,
+  "reasoning": 279,
+  "cached": 7168,
+  "cost": 0.00056284,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 8937,
+  "out": 428,
+  "reasoning": 86,
+  "cached": 8192,
+  "cost": 0.00045044,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9432,
+  "out": 378,
+  "reasoning": 83,
+  "cached": 8704,
+  "cost": 0.00043,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 9779,
+  "out": 480,
+  "reasoning": 202,
+  "cached": 9216,
+  "cost": 0.00049484,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 10103,
+  "out": 674,
+  "reasoning": 324,
+  "cached": 9728,
+  "cost": 0.00061396,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11043,
+  "out": 793,
+  "reasoning": 447,
+  "cached": 9984,
+  "cost": 0.00071784,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11463,
+  "out": 416,
+  "reasoning": 152,
+  "cached": 11008,
+  "cost": 0.00048796,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 11779,
+  "out": 171,
+  "reasoning": 120,
+  "cached": 11264,
+  "cost": 0.00034848,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 12892,
+  "out": 128,
+  "reasoning": 38,
+  "cached": 11776,
+  "cost": 0.00035696,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "tool_use"
+ },
+ {
+  "in": 13052,
+  "out": 543,
+  "reasoning": 16,
+  "cached": 12800,
+  "cost": 0.00059188,
+  "cost_source": "openrouter metered",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "provider": "InferenceNet",
+  "stop": "stop"
+ }
+]
