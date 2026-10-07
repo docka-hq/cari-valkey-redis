@@ -1,5 +1,7 @@
 # Contributing
 
+> This repository is the frozen record of the published runs. New prompts and jobs go to the test kit, https://github.com/docka-hq/can-agents-run-valkey: same formats, and it runs them.
+
 Two kinds of contribution are useful: a **selection prompt** (what do agents pick when nobody names a product) and a **job** (can an agent finish this on the server it is given). Open an issue or a pull request with either.
 
 ## A selection prompt

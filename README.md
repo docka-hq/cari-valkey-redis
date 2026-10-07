@@ -4,6 +4,7 @@ Issue 2 of **Can Agents Run It?**, a series by [Docka](https://docka.ai) that me
 
 - Results page: https://lab.docka.ai/can-agents-run-it/valkey/
 - Explorer, every answer and attempt with its own link: https://lab.docka.ai/can-agents-run-it/valkey/explore/
+- **Run these tests yourself, on any model, or add your own: the test kit, https://github.com/docka-hq/can-agents-run-valkey.** This repository is the frozen record of the published runs.
 
 This repository holds everything behind those pages: the prompts, the job definitions and their graders, the container images, every model answer, every agent attempt, and the code that ran and counted them. Configuration, prompts, graders and images were frozen and hashed before the first record of each wave. Nothing here was edited after the runs.
 
@@ -56,7 +57,7 @@ Spend for the whole study: $8.58. Four models are metered by OpenRouter; Claude 
 
 ## Contributing
 
-Think a prompt is unfair, or want a job tested that matters to you? See [CONTRIBUTING.md](CONTRIBUTING.md) for how to propose a prompt or a job.
+Think a prompt is unfair, or want a job tested that matters to you? Propose it in the [test kit](https://github.com/docka-hq/can-agents-run-valkey), which also runs it. This repository stays as the record of the published runs; [CONTRIBUTING.md](CONTRIBUTING.md) describes the formats.
 
 ## Licence
 
