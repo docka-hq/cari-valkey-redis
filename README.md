@@ -5,6 +5,7 @@ Issue 2 of **Can Agents Run It?**, a series by [Docka](https://docka.ai) that me
 - Results page: https://lab.docka.ai/can-agents-run-it/valkey/
 - Explorer, every answer and attempt with its own link: https://lab.docka.ai/can-agents-run-it/valkey/explore/
 - **Run these tests yourself, on any model, or add your own: the test kit, https://github.com/docka-hq/can-agents-run-valkey.** This repository is the frozen record of the published runs.
+- **Outside review, 2026-10-06:** what it found, what the re-check of the published runs shows (no number changes) and what changed: [REVIEW-2026-10-06.md](REVIEW-2026-10-06.md).
 
 This repository holds everything behind those pages: the prompts, the job definitions and their graders, the container images, every model answer, every agent attempt, and the code that ran and counted them. Configuration, prompts, graders and images were frozen and hashed before the first record of each wave. Nothing here was edited after the runs.
 
