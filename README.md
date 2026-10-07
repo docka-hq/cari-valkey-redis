@@ -14,7 +14,7 @@ This repository holds everything behind those pages: the prompts, the job defini
 | Question | Result |
 |---|---|
 | A person asks for a cache, a job queue or a semantic cache (two of the three prompts name Python) | Valkey 0 of 75. Redis 60, something else 15. |
-| A managed in-memory store on AWS | Valkey 16 of 25 |
+| A managed in-memory store on AWS | Valkey 17 of 25 (corrected from 16 on 2026-10-06, see the review note) |
 | An agent that provisions and runs the cache itself | Valkey 19 of 25 |
 | Told which server to use: a cache, semantic search, a migration from Redis 7.2 | Valkey 45 of 45, Redis 45 of 45 |
 | A migration from Redis 8.10 to Valkey 9.1 | 11 of 15 exact copies |
@@ -30,7 +30,7 @@ The five selection prompts differ in more than who is asking, so they show where
 | `selection/config.json` | The five prompts, the models, the protocol. `config.frozen.json` holds its hash. |
 | `selection/answers/` | Every answer as returned by the model, with tokens and cost. `refill.jsonl` is the one answer asked again after it came back empty. |
 | `selection/coded/` | How each answer was counted, and the totals. |
-| `selection/hand-review.json` | The 8 answers coded by hand, each with its reason. |
+| `selection/hand-review.json` | The 9 answers coded by hand, each with its reason: 8 with mixed evidence, 1 corrected after the outside review. |
 | `selection/kv_classify.py` | The coding rules as code. See `selection/README.md`. |
 | `jobs/wave-1/`, `jobs/wave-2/` | One YAML file per job: the prompt, the container, the starting state and the grader. See `jobs/README.md`. |
 | `jobs/graders/` | Grader sources. `jobs/make_tasks.py` inlines them into the YAML files. |

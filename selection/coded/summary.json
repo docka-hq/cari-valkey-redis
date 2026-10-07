@@ -2,8 +2,8 @@
  "coding": "v1 (tiered, code lines only)",
  "answers": 125,
  "primary": {
-  "valkey": 35,
-  "redis": 75,
+  "valkey": 36,
+  "redis": 74,
   "other": 15
  },
  "mentions_valkey": 42,
@@ -18,8 +18,8 @@
    "other": 1
   },
   "glm53flash": {
-   "valkey": 5,
-   "redis": 17,
+   "valkey": 6,
+   "redis": 16,
    "other": 3
   },
   "gpt6sol": {
@@ -54,14 +54,14 @@
    "other": 15
   },
   "sessions_aws": {
-   "valkey": 16,
-   "redis": 9
+   "valkey": 17,
+   "redis": 8
   }
  },
  "basis": {
   "code": 75,
-  "recommendation line": 34,
-  "hand review": 8,
+  "recommendation line": 33,
+  "hand review": 9,
   "recommendation line (postgres)": 1,
   "recommendation line (sqlite)": 3,
   "recommendation line (in-process)": 1,
@@ -72,7 +72,7 @@
   "agent_autonomous": 12,
   "sessions_aws": 3
  },
- "hand_reviewed": 8,
+ "hand_reviewed": 9,
  "open_conflicts": 0,
  "refilled": 1,
  "spend_usd": 2.636

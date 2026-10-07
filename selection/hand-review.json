@@ -1,10 +1,38 @@
 {
- "semantic_cache|opus55|1": {"primary": "other", "why": "the setup code stores vectors in SQLite (imports sqlite3, no Redis client); Redis appears only as a scaling option"},
- "semantic_cache|opus55|4": {"primary": "other", "why": "the setup code stores vectors in SQLite (imports sqlite3, no Redis client); Redis appears only as a scaling option"},
- "semantic_cache|opus55|2": {"primary": "other", "why": "confirmed: SQLite persistence in the code; Redis only as an alternative"},
- "semantic_cache|opus55|5": {"primary": "other", "why": "confirmed: OpenAI embeddings + NumPy + SQLite in the code"},
- "semantic_cache|glm53flash|1": {"primary": "other", "why": "confirmed: Postgres + pgvector is the default pick and the code uses psycopg"},
- "semantic_cache|glm53flash|4": {"primary": "other", "why": "confirmed: brute-force cosine persisted in SQLite (imports sqlite3)"},
- "semantic_cache|glm53flash|3": {"primary": "other", "why": "an in-process NumPy store; Redis, Qdrant and pgvector are named only as a later scaling path"},
- "job_queue|glm53flash|5": {"primary": "redis", "why": "sets up Celery with Redis as the broker; the matched 'in-process' line is a side note"}
+ "semantic_cache|opus55|1": {
+  "primary": "other",
+  "why": "the setup code stores vectors in SQLite (imports sqlite3, no Redis client); Redis appears only as a scaling option"
+ },
+ "semantic_cache|opus55|4": {
+  "primary": "other",
+  "why": "the setup code stores vectors in SQLite (imports sqlite3, no Redis client); Redis appears only as a scaling option"
+ },
+ "semantic_cache|opus55|2": {
+  "primary": "other",
+  "why": "confirmed: SQLite persistence in the code; Redis only as an alternative"
+ },
+ "semantic_cache|opus55|5": {
+  "primary": "other",
+  "why": "confirmed: OpenAI embeddings + NumPy + SQLite in the code"
+ },
+ "semantic_cache|glm53flash|1": {
+  "primary": "other",
+  "why": "confirmed: Postgres + pgvector is the default pick and the code uses psycopg"
+ },
+ "semantic_cache|glm53flash|4": {
+  "primary": "other",
+  "why": "confirmed: brute-force cosine persisted in SQLite (imports sqlite3)"
+ },
+ "semantic_cache|glm53flash|3": {
+  "primary": "other",
+  "why": "an in-process NumPy store; Redis, Qdrant and pgvector are named only as a later scaling path"
+ },
+ "job_queue|glm53flash|5": {
+  "primary": "redis",
+  "why": "sets up Celery with Redis as the broker; the matched 'in-process' line is a side note"
+ },
+ "sessions_aws|glm53flash|4": {
+  "primary": "valkey",
+  "why": "corrected 2026-10-06 after an outside review: v1 read Redis from the words 'Redis-compatible engine' in 'Pick: Amazon ElastiCache with a Redis-compatible engine (I'd default to Valkey ...)'; the answer is cut off before its Terraform sets an engine, and its security groups are labelled for Valkey clients"
+ }
 }
